@@ -1,0 +1,668 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		B6E9612B2D6EBE2C0027A9C3 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = B6E9612A2D6EBE2C0027A9C3 /* GoogleMobileAds */; };
+		B6E9612E2D6EBEC00027A9C3 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = B6E9612D2D6EBEC00027A9C3 /* FirebaseCore */; };
+		B6E961302D6EBEC00027A9C3 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = B6E9612F2D6EBEC00027A9C3 /* FirebaseFirestore */; };
+		B6E961982D6EDA4F0027A9C3 /* info.plist in Resources */ = {isa = PBXBuildFile; fileRef = B6E961972D6EDA4F0027A9C3 /* info.plist */; };
+		B6E9619A2D6EDA4F0027A9C3 /* info.plist in Resources */ = {isa = PBXBuildFile; fileRef = B6E961972D6EDA4F0027A9C3 /* info.plist */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		B6DF36AF2D49E7760086FB97 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B6DF36962D49E7740086FB97 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B6DF369D2D49E7740086FB97;
+			remoteInfo = "Maths Mania";
+		};
+		B6DF36B92D49E7760086FB97 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B6DF36962D49E7740086FB97 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B6DF369D2D49E7740086FB97;
+			remoteInfo = "Maths Mania";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		B6DF369E2D49E7740086FB97 /* Maths Quest.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Maths Quest.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		B6DF36AE2D49E7760086FB97 /* Maths QuestTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Maths QuestTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		B6DF36B82D49E7760086FB97 /* Maths QuestUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Maths QuestUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		B6E961972D6EDA4F0027A9C3 /* info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		B65986932D7A6232002B9EA1 /* Exceptions for "Maths Quest" folder in "Maths QuestTests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Assets.xcassets,
+				right.mp3,
+				wrong.mp3,
+			);
+			target = B6DF36AD2D49E7760086FB97 /* Maths QuestTests */;
+		};
+		B65986942D7A6232002B9EA1 /* Exceptions for "Maths Quest" folder in "Maths QuestUITests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Assets.xcassets,
+				right.mp3,
+				wrong.mp3,
+			);
+			target = B6DF36B72D49E7760086FB97 /* Maths QuestUITests */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		B6DF36A02D49E7740086FB97 /* Maths Quest */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B65986932D7A6232002B9EA1 /* Exceptions for "Maths Quest" folder in "Maths QuestTests" target */,
+				B65986942D7A6232002B9EA1 /* Exceptions for "Maths Quest" folder in "Maths QuestUITests" target */,
+			);
+			path = "Maths Quest";
+			sourceTree = "<group>";
+		};
+		B6DF36B12D49E7760086FB97 /* Maths QuestTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Maths QuestTests";
+			sourceTree = "<group>";
+		};
+		B6DF36BB2D49E7760086FB97 /* Maths QuestUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Maths QuestUITests";
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		B6DF369B2D49E7740086FB97 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B6E9612E2D6EBEC00027A9C3 /* FirebaseCore in Frameworks */,
+				B6E9612B2D6EBE2C0027A9C3 /* GoogleMobileAds in Frameworks */,
+				B6E961302D6EBEC00027A9C3 /* FirebaseFirestore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B6DF36AB2D49E7760086FB97 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B6DF36B52D49E7760086FB97 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		B6DF36952D49E7740086FB97 = {
+			isa = PBXGroup;
+			children = (
+				B6E961972D6EDA4F0027A9C3 /* info.plist */,
+				B6DF36A02D49E7740086FB97 /* Maths Quest */,
+				B6DF36B12D49E7760086FB97 /* Maths QuestTests */,
+				B6DF36BB2D49E7760086FB97 /* Maths QuestUITests */,
+				B6DF369F2D49E7740086FB97 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B6DF369F2D49E7740086FB97 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B6DF369E2D49E7740086FB97 /* Maths Quest.app */,
+				B6DF36AE2D49E7760086FB97 /* Maths QuestTests.xctest */,
+				B6DF36B82D49E7760086FB97 /* Maths QuestUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		B6DF369D2D49E7740086FB97 /* Maths Quest */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B6DF36C22D49E7760086FB97 /* Build configuration list for PBXNativeTarget "Maths Quest" */;
+			buildPhases = (
+				B6DF369A2D49E7740086FB97 /* Sources */,
+				B6DF369B2D49E7740086FB97 /* Frameworks */,
+				B6DF369C2D49E7740086FB97 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B6DF36A02D49E7740086FB97 /* Maths Quest */,
+			);
+			name = "Maths Quest";
+			packageProductDependencies = (
+				B6E9612A2D6EBE2C0027A9C3 /* GoogleMobileAds */,
+				B6E9612D2D6EBEC00027A9C3 /* FirebaseCore */,
+				B6E9612F2D6EBEC00027A9C3 /* FirebaseFirestore */,
+			);
+			productName = "Maths Mania";
+			productReference = B6DF369E2D49E7740086FB97 /* Maths Quest.app */;
+			productType = "com.apple.product-type.application";
+		};
+		B6DF36AD2D49E7760086FB97 /* Maths QuestTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B6DF36C52D49E7760086FB97 /* Build configuration list for PBXNativeTarget "Maths QuestTests" */;
+			buildPhases = (
+				B6DF36AA2D49E7760086FB97 /* Sources */,
+				B6DF36AB2D49E7760086FB97 /* Frameworks */,
+				B6DF36AC2D49E7760086FB97 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B6DF36B02D49E7760086FB97 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				B6DF36B12D49E7760086FB97 /* Maths QuestTests */,
+			);
+			name = "Maths QuestTests";
+			packageProductDependencies = (
+			);
+			productName = "Maths ManiaTests";
+			productReference = B6DF36AE2D49E7760086FB97 /* Maths QuestTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		B6DF36B72D49E7760086FB97 /* Maths QuestUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B6DF36C82D49E7760086FB97 /* Build configuration list for PBXNativeTarget "Maths QuestUITests" */;
+			buildPhases = (
+				B6DF36B42D49E7760086FB97 /* Sources */,
+				B6DF36B52D49E7760086FB97 /* Frameworks */,
+				B6DF36B62D49E7760086FB97 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B6DF36BA2D49E7760086FB97 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				B6DF36BB2D49E7760086FB97 /* Maths QuestUITests */,
+			);
+			name = "Maths QuestUITests";
+			packageProductDependencies = (
+			);
+			productName = "Maths ManiaUITests";
+			productReference = B6DF36B82D49E7760086FB97 /* Maths QuestUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		B6DF36962D49E7740086FB97 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1620;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					B6DF369D2D49E7740086FB97 = {
+						CreatedOnToolsVersion = 16.2;
+					};
+					B6DF36AD2D49E7760086FB97 = {
+						CreatedOnToolsVersion = 16.2;
+						TestTargetID = B6DF369D2D49E7740086FB97;
+					};
+					B6DF36B72D49E7760086FB97 = {
+						CreatedOnToolsVersion = 16.2;
+						TestTargetID = B6DF369D2D49E7740086FB97;
+					};
+				};
+			};
+			buildConfigurationList = B6DF36992D49E7740086FB97 /* Build configuration list for PBXProject "Maths Quest" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = B6DF36952D49E7740086FB97;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				B6E961292D6EBE2C0027A9C3 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */,
+				B6E9612C2D6EBEC00027A9C3 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = B6DF369F2D49E7740086FB97 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B6DF369D2D49E7740086FB97 /* Maths Quest */,
+				B6DF36AD2D49E7760086FB97 /* Maths QuestTests */,
+				B6DF36B72D49E7760086FB97 /* Maths QuestUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		B6DF369C2D49E7740086FB97 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B6DF36AC2D49E7760086FB97 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B6E961982D6EDA4F0027A9C3 /* info.plist in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B6DF36B62D49E7760086FB97 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B6E9619A2D6EDA4F0027A9C3 /* info.plist in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		B6DF369A2D49E7740086FB97 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B6DF36AA2D49E7760086FB97 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B6DF36B42D49E7760086FB97 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B6DF36B02D49E7760086FB97 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B6DF369D2D49E7740086FB97 /* Maths Quest */;
+			targetProxy = B6DF36AF2D49E7760086FB97 /* PBXContainerItemProxy */;
+		};
+		B6DF36BA2D49E7760086FB97 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B6DF369D2D49E7740086FB97 /* Maths Quest */;
+			targetProxy = B6DF36B92D49E7760086FB97 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		B6DF36C02D49E7760086FB97 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 7GJX674D2T;
+				DONT_GENERATE_INFOPLIST_FILE = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "/Users/ewdoozdemir/Desktop/Programming/Maths Mania/Info.plist";
+				INFOPLIST_PREPROCESS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.abz.mathsmania\n";
+				PRODUCT_NAME = Maths_Mania;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		B6DF36C12D49E7760086FB97 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 7GJX674D2T;
+				DONT_GENERATE_INFOPLIST_FILE = YES;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "/Users/ewdoozdemir/Desktop/Programming/Maths Mania/Info.plist";
+				INFOPLIST_PREPROCESS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.abz.mathsmania\n";
+				PRODUCT_NAME = Maths_Mania;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		B6DF36C32D49E7760086FB97 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_ASSET_PATHS = "\"Maths Quest/Preview Content\"";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "/Users/ewdoozdemir/Desktop/Programming/Maths Mania/info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Maths Quest";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.3;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.abz.maths-mania.Maths-Mania";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B6DF36C42D49E7760086FB97 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"Maths Quest/Preview Content\"";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "/Users/ewdoozdemir/Desktop/Programming/Maths Mania/info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Maths Quest";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.3;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.abz.maths-mania.Maths-Mania";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		B6DF36C62D49E7760086FB97 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.abz.maths-mania.Maths-ManiaTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Maths Quest.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Maths Quest";
+			};
+			name = Debug;
+		};
+		B6DF36C72D49E7760086FB97 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.abz.maths-mania.Maths-ManiaTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Maths Quest.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Maths Quest";
+			};
+			name = Release;
+		};
+		B6DF36C92D49E7760086FB97 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.abz.maths-mania.Maths-ManiaUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = "Maths Mania";
+			};
+			name = Debug;
+		};
+		B6DF36CA2D49E7760086FB97 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.abz.maths-mania.Maths-ManiaUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = "Maths Mania";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		B6DF36992D49E7740086FB97 /* Build configuration list for PBXProject "Maths Quest" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B6DF36C02D49E7760086FB97 /* Debug */,
+				B6DF36C12D49E7760086FB97 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B6DF36C22D49E7760086FB97 /* Build configuration list for PBXNativeTarget "Maths Quest" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B6DF36C32D49E7760086FB97 /* Debug */,
+				B6DF36C42D49E7760086FB97 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B6DF36C52D49E7760086FB97 /* Build configuration list for PBXNativeTarget "Maths QuestTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B6DF36C62D49E7760086FB97 /* Debug */,
+				B6DF36C72D49E7760086FB97 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B6DF36C82D49E7760086FB97 /* Build configuration list for PBXNativeTarget "Maths QuestUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B6DF36C92D49E7760086FB97 /* Debug */,
+				B6DF36CA2D49E7760086FB97 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		B6E961292D6EBE2C0027A9C3 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/googleads/swift-package-manager-google-mobile-ads";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.0.0;
+			};
+		};
+		B6E9612C2D6EBEC00027A9C3 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 11.9.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		B6E9612A2D6EBE2C0027A9C3 /* GoogleMobileAds */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B6E961292D6EBE2C0027A9C3 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */;
+			productName = GoogleMobileAds;
+		};
+		B6E9612D2D6EBEC00027A9C3 /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B6E9612C2D6EBEC00027A9C3 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+		B6E9612F2D6EBEC00027A9C3 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B6E9612C2D6EBEC00027A9C3 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = B6DF36962D49E7740086FB97 /* Project object */;
+}
