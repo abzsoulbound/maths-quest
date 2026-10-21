@@ -10,8 +10,6 @@
 		B6E9612B2D6EBE2C0027A9C3 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = B6E9612A2D6EBE2C0027A9C3 /* GoogleMobileAds */; };
 		B6E9612E2D6EBEC00027A9C3 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = B6E9612D2D6EBEC00027A9C3 /* FirebaseCore */; };
 		B6E961302D6EBEC00027A9C3 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = B6E9612F2D6EBEC00027A9C3 /* FirebaseFirestore */; };
-		B6E961982D6EDA4F0027A9C3 /* info.plist in Resources */ = {isa = PBXBuildFile; fileRef = B6E961972D6EDA4F0027A9C3 /* info.plist */; };
-		B6E9619A2D6EDA4F0027A9C3 /* info.plist in Resources */ = {isa = PBXBuildFile; fileRef = B6E961972D6EDA4F0027A9C3 /* info.plist */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -264,7 +262,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B6E961982D6EDA4F0027A9C3 /* info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -272,7 +269,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B6E9619A2D6EDA4F0027A9C3 /* info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -371,7 +367,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = "/Users/ewdoozdemir/Desktop/Programming/Maths Mania/Info.plist";
+				INFOPLIST_FILE = info.plist;
 				INFOPLIST_PREPROCESS = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
@@ -436,7 +432,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = "/Users/ewdoozdemir/Desktop/Programming/Maths Mania/Info.plist";
+				INFOPLIST_FILE = info.plist;
 				INFOPLIST_PREPROCESS = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
@@ -463,7 +459,7 @@
 				DEVELOPMENT_ASSET_PATHS = "\"Maths Quest/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = "/Users/ewdoozdemir/Desktop/Programming/Maths Mania/info.plist";
+				INFOPLIST_FILE = info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Maths Quest";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -496,7 +492,7 @@
 				DEVELOPMENT_ASSET_PATHS = "\"Maths Quest/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = "/Users/ewdoozdemir/Desktop/Programming/Maths Mania/info.plist";
+				INFOPLIST_FILE = info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Maths Quest";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -566,7 +562,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = "Maths Mania";
+				TEST_TARGET_NAME = "Maths Quest";
 			};
 			name = Debug;
 		};
@@ -582,7 +578,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = "Maths Mania";
+				TEST_TARGET_NAME = "Maths Quest";
 			};
 			name = Release;
 		};

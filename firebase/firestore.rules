@@ -1,0 +1,38 @@
+rules_version = '2';
+
+// Cloud Firestore security rules for Maths Quest (Firebase project maths-mania-8d613).
+//
+// The app has no sign-in. Its only Firestore access is FeedbackView.submitFeedback()
+// in Maths Quest/ContentView.swift:
+//
+//   db.collection("feedbacks").addDocument(data: ["text": feedbackText, "timestamp": Timestamp()])
+//
+// So clients may create feedback in exactly that shape and nothing else. Reading and
+// deleting feedback is done in the Firebase console or with the Admin SDK, which are
+// controlled by Google Cloud IAM and are not subject to these rules.
+//
+// Tests: firebase/tests/firestore-rules.test.mjs
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /feedbacks/{feedbackId} {
+      // No length limit beyond Firestore's 1 MiB document maximum: the app does not
+      // limit what users type and ignores write errors, so a limit here would make
+      // long feedback silently disappear. Add one only together with a matching
+      // client-side limit and error message.
+      allow create: if request.resource.data.keys().hasOnly(['text', 'timestamp'])
+                    && request.resource.data.keys().hasAll(['text', 'timestamp'])
+                    && request.resource.data.text is string
+                    && request.resource.data.text.size() > 0
+                    && request.resource.data.timestamp is timestamp;
+
+      allow read, update, delete: if false;
+    }
+
+    // Everything else is closed to clients. Firestore denies unmatched requests by
+    // default; this makes it explicit.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

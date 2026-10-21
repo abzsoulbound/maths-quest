@@ -6,15 +6,12 @@ import StoreKit
 @main
 struct Maths_ManiaApp: App {
     @StateObject private var gameData = GameData()
-    @StateObject private var purchaseManager = PurchaseManager.shared
+    // Deliberately not observed here, so purchase updates don't rebuild ContentView.
+    // Creating it at launch starts the app's single StoreKit transaction listener.
+    private let purchaseManager = PurchaseManager.shared
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State var adsRemoved: Bool
     @State private var isLoading = true
 
-    init() {
-        adsRemoved = UserDefaults.standard.bool(forKey: "adsRemoved")
-    }
-    
     var body: some Scene {
         WindowGroup {
             if isLoading {
@@ -23,10 +20,6 @@ struct Maths_ManiaApp: App {
                 ContentView()
                     .environmentObject(gameData)
                     .environmentObject(purchaseManager)
-                    .task {
-                        await purchaseManager.fetchProducts()
-                        await purchaseManager.observeTransactions()
-                    }
             }
         }
     }

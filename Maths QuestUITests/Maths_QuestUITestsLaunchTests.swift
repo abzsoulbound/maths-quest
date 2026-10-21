@@ -1,29 +1,22 @@
 //
-//  Maths_ManiaUITestsLaunchTests.swift
-//  Maths ManiaUITests
+//  Maths_QuestUITestsLaunchTests.swift
+//  Maths QuestUITests
 //
 //  Created by Abdullah Ozdemir on 29/01/2025.
 //
 
 import XCTest
 
-final class Maths_ManiaUITestsLaunchTests: XCTestCase {
+final class Maths_QuestUITestsLaunchTests: MathsQuestUITestCase {
 
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true
     }
 
-    override func setUpWithError() throws {
-        continueAfterFailure = false
-    }
-
     @MainActor
     func testLaunch() throws {
-        let app = XCUIApplication()
-        app.launch()
-
-        // Insert steps here to perform after app launch but before taking a screenshot,
-        // such as logging into a test account or navigating somewhere in the app
+        launchApp()
+        assertOnMainMenu()
 
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = "Launch Screen"
