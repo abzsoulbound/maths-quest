@@ -329,7 +329,7 @@ struct Stage6CSavedBackgroundTests {
         let defaults = makeDefaults()
         let json = """
         {"points":500,"totalQuestionsAnswered":0,"sfxvolume":0.5,"username":"","backgroundColourHex":"#FFD700",\
-        "backgroundOpacity":0.7,"unlockedColours":{"#0000FF":[0.8],"#FFD700":[0.7,1.0],"#00FFFF":[0.7]}}
+        "backgroundOpacity":0.7,"unlockedColours":{"#0000FF":[0.8],"#FFD700":[0.7,1.0],"#00FFFF":[0.7]},"adsRemoved":false}
         """
         defaults.set(Data(json.utf8), forKey: gameSettingsKey)
         let saved = defaults.data(forKey: gameSettingsKey)

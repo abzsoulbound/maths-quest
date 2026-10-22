@@ -12,8 +12,11 @@ import Network
 
 /// What is saved under the "GameSettings" key in UserDefaults, as JSON. Every field is read leniently (a missing or
 /// unreadable one gets its default and never discards the others), because players already have saves written by
-/// earlier versions. The earliest published format also had an `adsRemoved` field. It is ignored here: Remove Ads comes
-/// only from StoreKit (see PurchaseManager), never from a saved flag.
+/// earlier versions. The earliest published format (1.3) also had an `adsRemoved` field. Reading ignores it: Remove Ads
+/// comes only from StoreKit (see PurchaseManager), never from a saved flag. Writing always includes it as `false`,
+/// because 1.3's decoder requires the key: without it, a player who goes back to 1.3 (a TestFlight tester reinstalling
+/// from the App Store, say) sees an empty save, and 1.3's first save then overwrites their progress. `false` is what 1.3
+/// itself wrote for every player, paid or not; only a removed cheat code ever wrote `true`.
 struct GameSettings: Codable, Equatable {
     var points: Int
     var totalQuestionsAnswered: Int
@@ -40,6 +43,24 @@ extension GameSettings {
             backgroundOpacity: defaultOpacity,
             unlockedColours: [defaultColourHex: [defaultOpacity]]
         )
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case points, totalQuestionsAnswered, sfxvolume, username, backgroundColourHex, backgroundOpacity, unlockedColours
+        /// Written for 1.3, never read. See the type's comment.
+        case legacyAdsRemoved = "adsRemoved"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(points, forKey: .points)
+        try c.encode(totalQuestionsAnswered, forKey: .totalQuestionsAnswered)
+        try c.encode(sfxvolume, forKey: .sfxvolume)
+        try c.encode(username, forKey: .username)
+        try c.encode(backgroundColourHex, forKey: .backgroundColourHex)
+        try c.encode(backgroundOpacity, forKey: .backgroundOpacity)
+        try c.encode(unlockedColours, forKey: .unlockedColours)
+        try c.encode(false, forKey: .legacyAdsRemoved)
     }
 
     init(from decoder: Decoder) throws {
@@ -119,7 +140,8 @@ class GameData: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        // Tidying an old save (for example the "0000FF" key) is written back at once, so it happens only once.
+        // Tidying an old save (for example the "0000FF" key) is written back at once, so it happens only once. So is a
+        // save 1.3 couldn't read, so that going back to 1.3 never shows an empty game.
         if loadData() { saveData() }
     }
 
@@ -148,7 +170,7 @@ class GameData: ObservableObject {
     }
 
     /// Replaces every value with what is saved, so loading again can't duplicate anything.
-    /// Returns whether the saved copy should be rewritten (nothing saved yet, or it needed tidying).
+    /// Returns whether the saved copy should be rewritten (nothing saved yet, it needed tidying, or 1.3 couldn't read it).
     @discardableResult
     func loadData() -> Bool {
         let stored = loadSettings(from: defaults)
@@ -160,7 +182,7 @@ class GameData: ObservableObject {
         backgroundColourHex = settings.backgroundColourHex
         backgroundOpacity = settings.backgroundOpacity
         unlockedColours = settings.unlockedColours
-        return !stored.found || settings != stored.settings
+        return !stored.found || settings != stored.settings || !savedSettingsReadableBy13(in: defaults)
     }
 
     // MARK: Shop
@@ -882,6 +904,26 @@ func saveSettings(_ settings: GameSettings, to defaults: UserDefaults = .standar
         defaults.set(encoded, forKey: gameSettingsKey)
     } catch {
     }
+}
+
+/// The save exactly as 1.3 decodes it: every key required, with these types. Used only to check that a player who goes
+/// back to 1.3 can still read what is saved.
+private struct Version13Save: Decodable {
+    let points: Int
+    let totalQuestionsAnswered: Int
+    let sfxvolume: Double
+    let username: String
+    let backgroundColourHex: String
+    let backgroundOpacity: Double
+    let unlockedColours: [String: [Double]]
+    let adsRemoved: Bool
+}
+
+/// Whether 1.3 could read the saved progress. One written by an earlier build of this version, without `adsRemoved`,
+/// can't be.
+func savedSettingsReadableBy13(in defaults: UserDefaults = .standard) -> Bool {
+    guard let saved = defaults.data(forKey: gameSettingsKey) else { return false }
+    return (try? JSONDecoder().decode(Version13Save.self, from: saved)) != nil
 }
 
 /// What is saved, and whether anything was. A save that can't be read at all starts a fresh game, but is copied aside

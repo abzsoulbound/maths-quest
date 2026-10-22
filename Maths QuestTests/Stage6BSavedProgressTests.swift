@@ -69,9 +69,10 @@ struct Stage6BSavedProgressTests {
         #expect(game.unlockedColours["#FF0000"] == [0.7, 0.9])
         #expect(game.unlockedColours["#0000FF"] == [0.8])
         #expect(game.unlockedColours["0000FF"] == nil)
-        // The legacy flag is not carried forward.
+        // The legacy flag is not carried forward: it is written as false only so that 1.3 can still read the save.
         let json = try #require(defaults.data(forKey: gameSettingsKey))
-        #expect(!String(decoding: json, as: UTF8.self).contains("adsRemoved"))
+        let object = try #require(try JSONSerialization.jsonObject(with: json) as? [String: Any])
+        #expect(object["adsRemoved"] as? Bool == false)
     }
 
     @Test func legacyAdsRemovedFlagInTheSaveGrantsNothing() {
