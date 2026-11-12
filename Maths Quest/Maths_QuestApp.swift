@@ -15,7 +15,10 @@ struct Maths_ManiaApp: App {
     var body: some Scene {
         WindowGroup {
             if isLoading {
+                // `GameData` reads the save as it's made, before this is first drawn, so the first loading screen is
+                // on the child's chosen background from its first frame, as ContentView's is.
                 LoadingView(isLoading: $isLoading)
+                    .environment(\.chosenBackground, gameData.chosenBackground)
             } else {
                 ContentView()
                     .environmentObject(gameData)

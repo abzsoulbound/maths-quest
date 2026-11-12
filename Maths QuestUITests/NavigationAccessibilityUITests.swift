@@ -41,6 +41,9 @@ final class NavigationAccessibilityUITests: MathsQuestUITestCase {
         assertNavigationControl(homeButton, named: "Home", on: "Year 1")
         assertNavigationControl(settingsButton, named: "Settings", on: "Year 1")
         assertEveryButtonHasASpokenName(on: "Year 1")
+        // The header reads Home, the points, then Settings, on the device's own screen, iPad included.
+        assertReadInOrder(["Home", pointsLabel.label, "Settings", "Year 1", "Counting", "Addition", "Subtraction"],
+                          on: "Year 1")
 
         openActivity("Addition")
         assertNavigationControl(homeButton, named: "Home", on: "Addition")
@@ -412,9 +415,9 @@ final class NavigationAccessibilityUITests: MathsQuestUITestCase {
         openYear(1)
         openActivity("Addition")
         let field = answerField.frame
-        // The white box is a third of the screen wide. VoiceOver's frame for the field is the whole box once the
-        // margin can be tapped; before that it was only the text field inside it.
-        let reportsWholeBox = field.width >= windowFrame.width / 3 - 1
+        // The white box is a third of the column, which is the screen's width up to 600 points. VoiceOver's frame for
+        // the field is the whole box once the margin can be tapped; before that it was only the text field inside it.
+        let reportsWholeBox = field.width >= min(windowFrame.width, 600) / 3 - 1
         func whiteBox() -> CGRect {
             reportsWholeBox ? answerField.frame : answerField.frame.insetBy(dx: -16, dy: -16)
         }

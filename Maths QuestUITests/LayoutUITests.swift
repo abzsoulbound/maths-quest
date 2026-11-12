@@ -297,9 +297,13 @@ final class LayoutUITests: MathsQuestUITestCase {
     }
 
     /// Opens `activity` until it shows the question starting with `question`, which is one of the tallest. Checks
-    /// that its answer boxes and Enter are in view with the keyboard down, up, and put away again, and that the
-    /// keyboard doesn't change the question's size. Throws XCTSkip after the keyboard-down check if the keyboard
-    /// doesn't come up.
+    /// that its answer boxes and Enter are in view with the keyboard down, up, and put away again. With the keyboard
+    /// up, the question's words and its picture must be entirely in view too, and the question mustn't grow: it can
+    /// be laid out more tightly while the player types (the clock beside its instructions, at least 150 points across,
+    /// or the cube beside its question), and it must be back at its size when the keyboard goes. The question is
+    /// measured from the top of its words or its picture, whichever is higher, to the bottom of Enter. With the
+    /// keyboard down, up and put away, the words and the picture must keep at least 8 points from each side of the
+    /// screen. Throws XCTSkip after the keyboard-down check if the keyboard doesn't come up.
     @MainActor
     private func checkTallQuestion(on activity: String, inYear year: Int, startingWith question: String) throws {
         continueAfterFailure = true
@@ -324,9 +328,24 @@ final class LayoutUITests: MathsQuestUITestCase {
             return
         }
 
-        // From the top of the question to the bottom of Enter, which changes if the picture or pad is resized.
+        // The clock to read, or the cube or cuboid.
+        let picture = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == 'Clock' OR label BEGINSWITH 'A cub'")).firstMatch
+        // From the top of the question's words or its picture, whichever is higher, to the bottom of Enter. It changes
+        // if the picture or pad is resized, or the picture moves beside the words.
         func questionHeight() -> CGFloat {
-            anyEnterButton.frame.maxY - questionText.frame.minY
+            let top = picture.exists ? min(questionText.frame.minY, picture.frame.minY) : questionText.frame.minY
+            return anyEnterButton.frame.maxY - top
+        }
+        func assertSideMargins(_ when: String) {
+            let window = windowFrame
+            for (name, element) in [("words", questionText), ("picture", picture)] where element.exists {
+                let frame = element.frame
+                XCTAssertGreaterThanOrEqual(frame.minX - window.minX, 7.5,
+                    "\(activity), \(when): the question's \(name) at \(frame) are less than 8 points from the left of the screen.")
+                XCTAssertGreaterThanOrEqual(window.maxX - frame.maxX, 7.5,
+                    "\(activity), \(when): the question's \(name) at \(frame) are less than 8 points from the right of the screen.")
+            }
         }
         func attachFrames(_ when: String) {
             attachText("\(activity) frames, \(when)", """
@@ -334,6 +353,7 @@ final class LayoutUITests: MathsQuestUITestCase {
                 Question area: \(questionAreaFrame)
                 Keyboard glass from y = \(keyboardIsOnScreen ? "\(keyboardGlassFrame.minY)" : "none")
                 Question: \(questionText.frame)
+                Picture: \(picture.exists ? "\(picture.label): \(picture.frame)" : "none")
                 Clear (below the drawing pad, if there is one): \(app.buttons["Clear"].exists ? "\(app.buttons["Clear"].frame)" : "none")
                 Answer boxes: \(app.textFields.allElementsBoundByIndex.map(\.frame))
                 Enter: \(anyEnterButton.frame)
@@ -343,6 +363,7 @@ final class LayoutUITests: MathsQuestUITestCase {
         _ = waitForFrameToSettle(of: anyEnterButton, timeout: 3, steadyFor: 0.3)
         assertHeaderClearOfTheQuestion("\(activity), keyboard down")
         assertAnswerAndEnterInView("\(activity), keyboard down")
+        assertSideMargins("keyboard down")
         let height = questionHeight()
         attachScreenshot("\(activity): \(question) with the keyboard down")
         attachFrames("keyboard down")
@@ -352,8 +373,16 @@ final class LayoutUITests: MathsQuestUITestCase {
                 + "the on-screen keyboard didn't come up. The iPad simulator doesn't show the number or decimal pad "
                 + "while the Mac's keyboard is connected (I/O > Keyboard > Connect Hardware Keyboard).")
         }
+        _ = waitForFrameToSettle(of: anyEnterButton, timeout: 3, steadyFor: 0.3)
         assertAnswerAndEnterInView("\(activity), keyboard up")
-        XCTAssertEqual(questionHeight(), height, accuracy: 1, "\(activity): the question changed size when the keyboard came up.")
+        XCTAssertLessThanOrEqual(questionHeight(), height + 1, "\(activity): the question grew when the keyboard came up.")
+        let area = visibleQuestionArea
+        assertFullyVisible(questionText, "With the keyboard up, the question", within: area, tappable: false)
+        assertFullyVisible(picture, "With the keyboard up, the picture", within: area, tappable: false)
+        if picture.label == "Clock" {
+            XCTAssertGreaterThanOrEqual(picture.frame.width, 149.5, "\(activity): the clock is too small to read with the keyboard up.")
+        }
+        assertSideMargins("keyboard up")
         attachScreenshot("\(activity): \(question) with the keyboard up")
         attachFrames("keyboard up")
 
@@ -361,6 +390,7 @@ final class LayoutUITests: MathsQuestUITestCase {
         _ = waitForFrameToSettle(of: anyEnterButton, timeout: 3, steadyFor: 0.3)
         assertAnswerAndEnterInView("\(activity), keyboard put away")
         XCTAssertEqual(questionHeight(), height, accuracy: 1, "\(activity): the question changed size when the keyboard went.")
+        assertSideMargins("keyboard put away")
     }
 
     /// The two wrong answers, the Skip button and the offer of an ad, all with the keyboard up. `question` is a

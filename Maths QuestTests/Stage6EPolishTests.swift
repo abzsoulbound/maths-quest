@@ -185,6 +185,9 @@ struct Stage6EGeometryHelperTests {
 struct Stage6EClockFaceTests {
     /// The clocks are 200 to 300 points across.
     static let radii: [CGFloat] = [100, 110, 125, 137.5, 150]
+    /// While the player types the time, the clock to read is drawn beside its instructions: 150 points across at
+    /// the least, 181 on an iPhone SE and 197.2 on an iPhone 17 Pro (Stage 9B).
+    static let compactRadii: [CGFloat] = [75, 77, 79, 90.5, 98.6]
 
     private static func box(of number: Int, in layout: ClockFaceLayout) -> CGRect {
         let size = ClockFaceLayout.numeralBox(number, size: layout.numeralSize)
@@ -196,7 +199,7 @@ struct Stage6EClockFaceTests {
     @Test func numbersStayClearOfTheHourMarksAtEveryTextSize() {
         for dynamicTypeSize in DynamicTypeSize.allCases {
             let textSize = ScaledFont.pointSize(17, maximum: .greatestFiniteMagnitude, for: dynamicTypeSize)
-            for radius in Self.radii {
+            for radius in Self.radii + Self.compactRadii {
                 let layout = ClockFaceLayout(radius: radius, textSize: textSize)
                 let label = "\(dynamicTypeSize), radius \(radius)"
                 #expect(layout.numeralSize == min(textSize, radius * ClockFaceLayout.largestNumeralSize), "\(label)")
@@ -215,7 +218,7 @@ struct Stage6EClockFaceTests {
     @Test func numbersNeverOverlapEachOther() {
         for dynamicTypeSize in DynamicTypeSize.allCases {
             let textSize = ScaledFont.pointSize(17, maximum: .greatestFiniteMagnitude, for: dynamicTypeSize)
-            for radius in Self.radii {
+            for radius in Self.radii + Self.compactRadii {
                 let layout = ClockFaceLayout(radius: radius, textSize: textSize)
                 for number in 1...12 {
                     let next = number % 12 + 1
@@ -325,8 +328,12 @@ struct Stage6EVolumeDiagramTests {
                                     "\(name) and \(otherName) at \(width), \(length), \(height)")
                         }
                     }
-                    // Nothing spare round the edge: the diagram is as small as its parts allow.
-                    let everything = labels.map(\.1).reduce(layout.drawing) { $0.union($1) }
+                    // Nothing spare round the edge: the diagram is as small as its parts allow, with room for their
+                    // ink (the points of the drawing's corners and the measurements' outlines; see Stage 9B's
+                    // `everythingTheCuboidDrawsIsInsideItsDiagram`).
+                    let ink = VolumeShapeLayout.inkOverhang, outline = VolumeShapeLayout.outlineWidth
+                    let everything = labels.map { $0.1.insetBy(dx: -outline, dy: -outline) }
+                        .reduce(layout.drawing.insetBy(dx: -ink, dy: -ink)) { $0.union($1) }
                     #expect(abs(everything.minX) < Geometry.tolerance && abs(everything.minY) < Geometry.tolerance)
                     #expect(abs(everything.width - layout.size.width) < Geometry.tolerance)
                     #expect(abs(everything.height - layout.size.height) < Geometry.tolerance)
@@ -696,18 +703,37 @@ struct Stage6EBarChartTests {
 @Suite(.enabled(if: Stage6ESource.isAvailable, "ContentView.swift isn't reachable from this test run"))
 struct Stage6ELayoutWiringTests {
     /// At the largest text sizes "Points: 5,000" wrapped and ran into the screen's title.
-    @Test func theHeaderOnlyStacksThePointsWhenTheyDontFitBetweenTheButtons() throws {
+    ///
+    /// Updated deliberately in Stage 9B. The points moved from the middle of the bar to one chip at the right, beside
+    /// Settings, in the same place on every screen. So the narrow row has one flexible gap (after the leading button),
+    /// not one on each side of the points, and `Spacer(minLength: 4)` appears once instead of twice. Every other check
+    /// is unchanged. The new checks below hold the Stage 9A defect D4: the bar used to fill the empty side with an
+    /// invisible, disabled gear and a blank text, which VoiceOver still found and which made the header taller.
+    ///
+    /// Updated deliberately again in the Stage 9B final corrections. Before the points go under the buttons, the narrow
+    /// row is tried once more with the chip's star left out, so there are two narrow rows, each with one flexible gap:
+    /// `Spacer(minLength: 4)` appears twice and `compact: true)` four times, and the new row must come after the first
+    /// narrow row and before the points under the buttons. Every other check is unchanged.
+    @Test func theHeaderOnlyStacksThePointsWhenTheyDontFitBesideTheButtons() throws {
         let bar = try Stage6ESource.declaration(startingWith: "\nstruct NavigationBar: View {")
         let body = try Stage6ESource.function("var body: some View", in: bar)
         #expect(body.contains("ViewThatFits(in: .horizontal)"))
         #expect(Stage6ESource.count("Spacer(minLength: 4)", in: body) == 2)
         #expect(body.contains(".fixedSize(horizontal: false, vertical: true)"))
-        // The usual row first, then the row with narrower button margins, then the points under the buttons.
+        // One points chip, and nothing invisible standing in for a missing button.
+        #expect(bar.contains("PointsChip("))
+        #expect(!bar.contains("Text(\" \")"))
+        #expect(!bar.contains(".disabled(true)"))
+        #expect(!bar.contains("accessibilityHidden(true)"))
+        // The usual row first, then the row with narrower button margins, then that row with the narrow chip, then
+        // the points under the buttons.
         let usual = try #require(body.range(of: "leadingButton(compact: false)"))
         let compact = try #require(body.range(of: "leadingButton(compact: true)"))
         let stacked = try #require(body.range(of: "VStack(spacing: 0)"))
         #expect(usual.lowerBound < compact.lowerBound && compact.lowerBound < stacked.lowerBound)
-        #expect(Stage6ESource.count("compact: true)", in: body) == 2)
+        let narrow = try #require(body.range(of: "pointsChip(height: rowHeight, narrow: true)"))
+        #expect(compact.lowerBound < narrow.lowerBound && narrow.lowerBound < stacked.lowerBound)
+        #expect(Stage6ESource.count("compact: true)", in: body) == 4)
         // Narrower margins never make a button smaller than 44 points to tap.
         #expect(bar.contains(".frame(minWidth: compact ? 44 : nil)"))
         #expect(bar.contains(".contentShape(Rectangle())"))
@@ -725,6 +751,11 @@ struct Stage6ELayoutWiringTests {
     }
 
     /// The probability question scrolled under the header and its feedback appeared below the screen.
+    ///
+    /// Updated deliberately in Stage 9B (D9): the working-out pad now goes below Enter, so the end of the question is
+    /// the pad, not the row with Enter. Scrolling to the end, as iOS 18 and later did, would pass the row and on a
+    /// small screen hide the top of the question, so every version now scrolls to the row itself once the message is
+    /// in. Every other check is unchanged.
     @Test func probabilityKeepsItsQuestionAnswerAndFeedbackOnScreen() throws {
         let probability = try Stage6ESource.body(of: "Year6ProbabilityView")
         #expect(probability.contains("WorkingOutView(canvasView: $canvasView, padHeight: padHeight)"))
@@ -736,13 +767,12 @@ struct Stage6ELayoutWiringTests {
         #expect(layout.contains(".modifier(RevealSubmitRowByScrolling(scroller: scroller))"))
         // The scroll waits until the message is in the question, so it isn't stopped at the question's old height.
         let reveal = try Stage6ESource.declaration(startingWith: "\nprivate struct RevealSubmitRowByScrolling: ViewModifier {")
-        #expect(reveal.contains("content.modifier(ScrollToTheEnd())"))
         #expect(reveal.contains(".environment(\\.revealSubmitRow, RevealSubmitRow {"))
         #expect(reveal.contains("DispatchQueue.main.async"))
         #expect(reveal.contains("scroller.scrollTo(QuestionSubmitRow.id, anchor: .bottom)"))
-        let toTheEnd = try Stage6ESource.declaration(startingWith: "\nprivate struct ScrollToTheEnd: ViewModifier {")
-        #expect(toTheEnd.contains(".scrollPosition($position)"))
-        #expect(toTheEnd.contains("position.scrollTo(edge: .bottom)"))
+        let source = try Stage6ESource.source()
+        #expect(!source.contains("ScrollToTheEnd"))
+        #expect(!source.contains("scrollTo(edge:"))
     }
 
     @Test func volumeIsLaidOutFromItsMeasurementsAndFitsItsPad() throws {

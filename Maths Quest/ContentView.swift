@@ -145,6 +145,12 @@ class GameData: ObservableObject {
         if loadData() { saveData() }
     }
 
+    /// The background colour the child has chosen, at its strength. `init` reads it from the save straight away, so
+    /// it's ready before the first screen is drawn.
+    var chosenBackground: ChosenBackground {
+        ChosenBackground(hex: backgroundColourHex, opacity: backgroundOpacity)
+    }
+
     func saveData() {
         let settings = GameSettings(
             points: points,
@@ -1068,8 +1074,9 @@ struct FractionAnswerBoxes: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
+        // As wide as the question's column on iPad (see `Metrics.contentWidth`), as tall as the screen.
         let layout = FractionBoxLayout(textSize: FractionBoxLayout.textSize(for: dynamicTypeSize),
-                                       screen: UIScreen.main.bounds.size)
+                                       screen: CGSize(width: Metrics.contentWidth, height: UIScreen.main.bounds.height))
         VStack(spacing: FractionBoxLayout.spacing) {
             box("Numerator", text: $numerator, hint: "The top number of the fraction.", nextBox: .bottom, layout)
             Rectangle()
@@ -1162,21 +1169,28 @@ struct ScaledFont: ViewModifier {
     }
 }
 
+/// The screen shown for a moment at launch: first by `Maths_ManiaApp`, then by `ContentView` as it starts. Both pass in
+/// the background colour the child has chosen, which `GameData` has read from the save before either is drawn, so the
+/// screen is on that colour from its first frame, with words and a spinner in the colour that reads on it, and the app
+/// doesn't open in a different blue and then jump to their colour. (The blank screen iOS shows before the app's own
+/// code runs is the system's, and can't know the colour.)
 struct LoadingView: View {
     @Binding var isLoading: Bool
+    @Environment(\.chosenBackground) private var chosenBackground
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ZStack {
-            Color.blue.opacity(0.8).edgesIgnoringSafeArea(.all)
-            VStack {
+            Color(hex: chosenBackground.hex).opacity(chosenBackground.opacity).edgesIgnoringSafeArea(.all)
+            VStack(spacing: 32) {
                 Text("Maths Quest")
-                    .font(.system(size: UIScreen.main.bounds.width * 0.1))
+                    .font(.system(size: Metrics.contentWidth * 0.1))
                     .multilineTextAlignment(.center)
                     .fontWeight(.bold)
-                    .foregroundColor(.white)
+                    .foregroundStyle(.onBackground)
 
                 ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .progressViewStyle(CircularProgressViewStyle(tint: wordsColour))
                     .scaleEffect(2)
             }
         }
@@ -1186,27 +1200,67 @@ struct LoadingView: View {
             }
         }
     }
+
+    private var wordsColour: Color {
+        Color(ReadableOnBackground.onBackground.rgb(on: chosenBackground, colorScheme: colorScheme) ?? Contrast.white)
+    }
 }
 
+/// The screen shown while there's no internet and ads haven't been removed. It says what to do in plain words. Its
+/// button opens Maths Quest's own page in Settings, the only page an app is allowed to open there, so the words say
+/// where to go next. The game carries on by itself as soon as it's connected again.
 struct NoInternetView: View {
+    @Environment(\.chosenBackground) private var chosenBackground
+
     var body: some View {
-        VStack {
-            Text("No Internet Connection")
-                .font(.title)
-                .padding()
-            Text("Please check your internet connection and try again.")
-                .multilineTextAlignment(.center)
-                .padding()
-            Button(action: {
-                UIApplication.shared.open(URL(string: "App-Prefs:root=WIFI")!)
-            }) {
-                Text("Go to Settings")
-                    .foregroundColor(.white)
-                    .padding()
-                    .background(Color.buttonBlue)
-                    .cornerRadius(10)
+        ZStack {
+            Color(hex: chosenBackground.hex).opacity(chosenBackground.opacity).edgesIgnoringSafeArea(.all)
+            ViewThatFits(in: .vertical) {
+                message
+                ScrollView { message }
             }
         }
+    }
+
+    private var message: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "wifi.slash")
+                .font(.system(size: 52, weight: .semibold))
+                .foregroundStyle(.onBackground)
+                .accessibilityHidden(true)
+            ScreenTitle(title: "No Internet Connection")
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Maths Quest needs the internet to play.")
+                Text("Ask a grown-up to open Settings, then turn on Wi-Fi or mobile data.")
+                Text("The game carries on by itself once it's connected.")
+            }
+            .scaledFont(size: 20, maximum: 30)
+            .fontWeight(.medium)
+            .foregroundStyle(.cardWords)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .card()
+            Button {
+                if let settings = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(settings)
+                }
+            } label: {
+                Text("Open Settings")
+                    .scaledFont(size: 20, maximum: 30)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
+                    .frame(minWidth: Metrics.minimumTapSize, minHeight: Metrics.minimumTapSize)
+                    .background(Color.buttonBlue, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .accessibilityHint("Opens Maths Quest's page in the Settings app.")
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 32)
+        .readableColumn()
     }
 }
 
@@ -1244,7 +1298,7 @@ struct WorkingOutView: View {
                 .accessibilityLabel("Working-out pad")
                 .accessibilityHint("Draw here to work out the answer. It isn't marked.")
                 .background(Color.white)
-                .cornerRadius(UIScreen.main.bounds.width * 0.02)
+                .cornerRadius(Metrics.contentWidth * 0.02)
                 .border(Color.gray, width: 1)
                 .shadow(radius: 2)
 
@@ -1274,15 +1328,15 @@ struct WorkingOutView: View {
     private func padButtonLabel(_ title: String, colour: Color) -> some View {
         Text(title)
             .frame(
-                width : UIScreen.main.bounds.width * 0.25,
+                width : Metrics.contentWidth * 0.25,
                 height : max(UIScreen.main.bounds.height * 0.05, 34)
             )
-            .font(.system(size:UIScreen.main.bounds.width * 0.04))
+            .font(.system(size:Metrics.contentWidth * 0.04))
             .fontWeight(.bold)
             .padding(5)
             .background(colour)
             .foregroundColor(.white)
-            .cornerRadius(UIScreen.main.bounds.width * 0.02)
+            .cornerRadius(Metrics.contentWidth * 0.02)
     }
 }
 
@@ -1388,23 +1442,41 @@ struct NavigationBar: View {
             hex: gameData.backgroundColourHex, opacity: gameData.backgroundOpacity, colorScheme: colorScheme)))
     }
 
+    /// Each button's icon sits in a square this size, so Home, the menu button, Settings and the points chip are all
+    /// the same height and line up.
+    private var iconSize: CGFloat {
+        UIScreen.main.bounds.width * 0.09
+    }
+
+    /// The height of a button: its icon, and the space above and below it, which can be tapped too.
+    private var rowHeight: CGFloat {
+        iconSize + 32
+    }
+
     var body: some View {
-        // At the largest text sizes "Points: 5,000" is too wide for the space between the buttons on an iPhone, and
-        // wrapped onto two lines it ran into the screen's title. So the buttons give up their side margins first,
-        // staying 44 points wide, and only if that still isn't enough do the points go on a line of their own.
+        // The points are on a chip at the right, beside Settings where there is a Settings button. At the largest
+        // text sizes "Points: 5,000" can be too wide to fit beside the buttons on an iPhone. So the buttons give up
+        // their side margins first, staying 44 points wide, then the chip gives up its star and some of its margin,
+        // and only if that still isn't enough do the points go on a line of their own, which takes room from the
+        // question. The buttons' own margins keep them clear of the status bar and the question, so the header
+        // needs no space of its own above or below them.
         ViewThatFits(in: .horizontal) {
             HStack {
                 leadingButton(compact: false)
                 Spacer()
-                pointsText
-                Spacer()
+                pointsChip(height: rowHeight)
                 trailingButton(compact: false)
             }
-            HStack(spacing: 0) {
+            HStack(spacing: 4) {
                 leadingButton(compact: true)
                 Spacer(minLength: 4)
-                pointsText
+                pointsChip(height: rowHeight)
+                trailingButton(compact: true)
+            }
+            HStack(spacing: 4) {
+                leadingButton(compact: true)
                 Spacer(minLength: 4)
+                pointsChip(height: rowHeight, narrow: true)
                 trailingButton(compact: true)
             }
             VStack(spacing: 0) {
@@ -1413,28 +1485,28 @@ struct NavigationBar: View {
                     Spacer()
                     trailingButton(compact: false)
                 }
-                pointsText
-                    .multilineTextAlignment(.center)
+                pointsChip(height: nil)
                     .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
-        .padding()
-        .background(Color.clear)
+        .padding(.horizontal)
         .padding(.top, 10)
     }
 
-    private var pointsText: some View {
-        Text(Points ? "Points: \(gameData.points)" : " ")
-            .scaledFont(size: UIScreen.main.bounds.width * 0.05)
-            .foregroundColor(Points ? itemColour : .clear)
-            .fontWeight(.bold)
-            .accessibilityHidden(!Points)
+    /// Nothing at all where a screen shows no points, so VoiceOver has no empty item to stop on.
+    @ViewBuilder
+    private func pointsChip(height: CGFloat?, narrow: Bool = false) -> some View {
+        if Points {
+            PointsChip(points: gameData.points, height: height, narrow: narrow)
+        }
     }
 
     /// The space around a button's icon, which can be tapped too. When the points need the room it's narrower at the
     /// sides, but the button stays at least 44 points wide.
     private func margins(_ icon: some View, compact: Bool) -> some View {
         icon
+            .frame(width: iconSize, height: iconSize)
             .padding(.vertical)
             .padding(.horizontal, compact ? 0 : nil)
             .frame(minWidth: compact ? 44 : nil)
@@ -1483,6 +1555,8 @@ struct NavigationBar: View {
         }
     }
 
+    /// Settings, on screens with Home. Screens with the menu button have nothing here: the points chip sits at the
+    /// right instead, so no invisible button is needed to balance the row.
     @ViewBuilder
     private func trailingButton(compact: Bool) -> some View {
         if Back {
@@ -1499,18 +1573,6 @@ struct NavigationBar: View {
             }
             .accessibilityLabel("Settings")
             .accessibilityIdentifier("gearshape")
-        } else {
-            margins(
-                Image(systemName: "gearshape")
-                    .resizable()
-                    .frame(
-                        width: UIScreen.main.bounds.width * 0.09,
-                        height: UIScreen.main.bounds.height * 0.09
-                    )
-                    .foregroundColor(.clear),
-                compact: compact)
-                .disabled(true)
-                .accessibilityHidden(true)
         }
     }
 }
@@ -1520,29 +1582,67 @@ private enum QuestionSubmitRow: Hashable {
     case id
 }
 
+/// Where the part of a question that must stay in view while the player types starts and ends: the top of
+/// `questionTop()` and the bottom of `questionSubmitRow()`. See `compactWhileTyping(_:allowed:)`. Also where the
+/// message after Enter is, while it shows (`AnswerFeedbackText`).
+private struct QuestionBounds: PreferenceKey {
+    struct Value {
+        var top: Anchor<CGRect>?
+        var submitRow: Anchor<CGRect>?
+        var message: Anchor<CGRect>?
+    }
+
+    static let defaultValue = Value()
+
+    static func reduce(value: inout Value, nextValue: () -> Value) {
+        let next = nextValue()
+        value.top = value.top ?? next.top
+        value.submitRow = value.submitRow ?? next.submitRow
+        value.message = value.message ?? next.message
+    }
+}
+
+/// Marks the first line of the message after Enter, which `QuestionLayout` keeps in view if the keyboard comes up
+/// while the message shows.
+private enum AnswerFeedbackFirstLine: Hashable {
+    case id
+}
+
 /// The screen layout every activity shares. The header (home, points and settings) has its own strip at the top
 /// and the question is centred in the space below it, so a tall question or the "Correct!" message can't run into
 /// the points or push the header off the screen. A question too tall for the space scrolls instead.
 ///
 /// The keyboard takes space from the question rather than covering it. As the keyboard comes up, the question
-/// scrolls so the row marked with `questionSubmitRow()` sits just above it. The answer box is above that row, so
-/// the box and Enter both stay in view, and the player can tap Enter without hiding the keyboard first. The number
-/// pad has no Return key, so this is the only way to submit while it's up.
+/// scrolls, if it has to, just far enough for the row marked with `questionSubmitRow()` to sit above the keyboard.
+/// The answer box is above that row, so the box and Enter both stay in view, and the player can tap Enter without
+/// hiding the keyboard first. The number pad has no Return key, so this is the only way to submit while it's up.
+/// So an activity puts anything that can be covered, such as the working-out pad, below the row: above the answer,
+/// it would push the question off the top whenever the row was scrolled into view.
 ///
 /// A question with a tall picture or drawing pad can use `fitOnScreen` to make it shorter on a small screen, so the
-/// answer box and Enter are in view with the keyboard down without scrolling.
+/// whole question is in view with the keyboard down without scrolling. A question whose picture leaves too little
+/// room above the keyboard for the words, the picture, the answer boxes and Enter can use `compactWhileTyping` to
+/// lay itself out more tightly while the keyboard is up.
 ///
 /// The message after Enter makes the question taller for a moment. On a question that only just fits, that pushes the
-/// row below the bottom of the space, so as the message comes in, the question scrolls to its end, where the row is.
-/// That brings the row, and the message above it, back into view. The message goes in straight away, and only its
-/// fade is animated (`AnyTransition.answerFeedback`). If the rest of the question slid down to make room for it, the
-/// scroll view's content would grow a little at a time, and a scroll can't go past the end of the content as it is
-/// when the scroll starts, so the question wouldn't move. The message goes out with the question sliding back, which
-/// only makes it shorter.
+/// row below the bottom of the space, so once the message is in, the question scrolls the row back to the bottom of
+/// the space. That brings the row, and the message above it, back into view. The message goes in straight away, and
+/// only its fade is animated (`AnyTransition.answerFeedback`). If the rest of the question slid down to make room for
+/// it, the row would still be on its way down when the scroll ran, and the scroll would do nothing. The message goes
+/// out with the question sliding back, which only makes it shorter. Once it has gone, the question scrolls the row to
+/// the bottom again, which brings back the top of a question that only fits without the message.
+///
+/// The player can tap the answer box again while the message shows, and the keyboard comes up with the message still
+/// in the question. Scrolling the row above the keyboard then could push the top of the question off the screen, so
+/// the question scrolls only as far as the first line of the message instead. The message is no taller than the row
+/// with Enter, so whenever the top of the question is in view with the row above the keyboard, it's in view with the
+/// first line of the message there too, and so is the answer box above it. Enter can't be pressed until the message
+/// has gone, and the row comes back above the keyboard then.
 struct QuestionLayout<Content: View>: View {
     @Binding var isSidebarOpen: Bool
     let content: Content
     @State private var roomWithoutKeyboard: CGFloat = 0
+    @State private var isMessageShowing = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -1557,7 +1657,18 @@ struct QuestionLayout<Content: View>: View {
                     ScrollView {
                         content
                             .environment(\.questionRoom, roomWithoutKeyboard)
-                            .frame(maxWidth: .infinity, minHeight: space.size.height)
+                            .environment(\.roomAboveKeyboard,
+                                         space.size.height < roomWithoutKeyboard - 100 ? space.size.height : 0)
+                            .backgroundPreferenceValue(QuestionBounds.self) { bounds in
+                                Color.clear
+                                    .onChange(of: bounds.message != nil, initial: true) { _, isShowing in
+                                        isMessageShowing = isShowing
+                                    }
+                            }
+                            // On iPad the question sits in a centred column, as the menus and forms do, and its
+                            // sizes are worked out from the column's width (`Metrics.contentWidth`).
+                            .readableColumn()
+                            .frame(minHeight: space.size.height)
                             // The scroll view covers the activity's background, which hides the keyboard when
                             // tapped, so the space around the question does the same. It's behind the question,
                             // so the buttons and answer boxes keep their own taps.
@@ -1572,7 +1683,11 @@ struct QuestionLayout<Content: View>: View {
                     .modifier(RevealSubmitRowByScrolling(scroller: scroller))
                     .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
                         withAnimation(reduceMotion ? nil : .default) {
-                            scroller.scrollTo(QuestionSubmitRow.id, anchor: .bottom)
+                            if isMessageShowing {
+                                scroller.scrollTo(AnswerFeedbackFirstLine.id, anchor: .bottom)
+                            } else {
+                                scroller.scrollTo(QuestionSubmitRow.id, anchor: .bottom)
+                            }
                         }
                     }
                 }
@@ -1596,11 +1711,20 @@ struct QuestionLayout<Content: View>: View {
 /// rather than once for every copy of the text that makes up the outline.
 ///
 /// The message goes just above Enter, so on a question that only just fits it can push Enter and Skip below the bottom
-/// of the screen. As it appears, it scrolls them back into view. See `QuestionLayout`.
+/// of the screen. As it appears, it scrolls them back into view. After any message but "Correct!" the question stays,
+/// so as the message goes, it scrolls them to the bottom of the screen again: the question is shorter without the
+/// message, so this brings its top back into view. After "Correct!" a new question comes, and is left where it is,
+/// unless the player brought the keyboard up while the message showed: then Enter and Skip are scrolled above the
+/// keyboard for the new question. See `QuestionLayout`.
 struct AnswerFeedbackText: View {
     let message: String
     var outlined = true
     @Environment(\.revealSubmitRow) private var revealSubmitRow
+    @Environment(\.roomAboveKeyboard) private var roomAboveKeyboard
+
+    private var isCorrect: Bool {
+        message == "Correct!"
+    }
 
     var body: some View {
         ZStack {
@@ -1609,7 +1733,7 @@ struct AnswerFeedbackText: View {
                     ForEach([-2, -1, 0, 1, 2], id: \.self) { yOffset in
                         Text(message)
                             .foregroundColor(.black)
-                            .font(.system(size: UIScreen.main.bounds.width * 0.075))
+                            .font(.system(size: Metrics.contentWidth * 0.075))
                             .fontWeight(.bold)
                             .offset(x: CGFloat(xOffset), y: CGFloat(yOffset))
                     }
@@ -1618,15 +1742,26 @@ struct AnswerFeedbackText: View {
             }
 
             Text(message)
-                .foregroundColor(message == "Correct!" ? .green : .red)
-                .font(.system(size: UIScreen.main.bounds.width * 0.075))
+                .foregroundColor(isCorrect ? .green : .red)
+                .font(.system(size: Metrics.contentWidth * 0.075))
                 .fontWeight(.bold)
         }
+        .background(alignment: .top) {
+            Color.clear
+                .frame(height: UIFont.systemFont(ofSize: Metrics.contentWidth * 0.075, weight: .bold).lineHeight)
+                .id(AnswerFeedbackFirstLine.id)
+        }
+        .anchorPreference(key: QuestionBounds.self, value: .bounds) { QuestionBounds.Value(message: $0) }
         .onAppear {
             announce(message)
             revealSubmitRow()
         }
         .onChange(of: message) { _, newMessage in announce(newMessage) }
+        .onDisappear {
+            if !isCorrect || roomAboveKeyboard > 0 {
+                revealSubmitRow()
+            }
+        }
     }
 }
 
@@ -1648,36 +1783,19 @@ struct RevealSubmitRow {
     }
 }
 
-/// Sets `revealSubmitRow` for the question in `QuestionLayout`'s scroll view. From iOS 18 it scrolls to the end of the
-/// question. iOS 17 can only scroll to a view, so there it scrolls the row to the bottom of the space instead, once the
-/// question has been laid out again with the message in it. See `QuestionLayout`.
+/// Sets `revealSubmitRow` for the question in `QuestionLayout`'s scroll view. It scrolls the row with Enter to the
+/// bottom of the space, or as near as the question allows, once the question has been laid out again with the
+/// message in it. It doesn't scroll to the end of the question: on a question with a working-out pad, that's the
+/// pad, below the row, and scrolling there on a small screen could hide the top of the question. See `QuestionLayout`.
 private struct RevealSubmitRowByScrolling: ViewModifier {
     let scroller: ScrollViewProxy
 
     func body(content: Content) -> some View {
-        if #available(iOS 18.0, *) {
-            content.modifier(ScrollToTheEnd())
-        } else {
-            content.environment(\.revealSubmitRow, RevealSubmitRow {
-                DispatchQueue.main.async {
-                    scroller.scrollTo(QuestionSubmitRow.id, anchor: .bottom)
-                }
-            })
-        }
-    }
-}
-
-/// See `RevealSubmitRowByScrolling`.
-@available(iOS 18.0, *)
-private struct ScrollToTheEnd: ViewModifier {
-    @State private var position = ScrollPosition()
-
-    func body(content: Content) -> some View {
-        content
-            .scrollPosition($position)
-            .environment(\.revealSubmitRow, RevealSubmitRow {
-                position.scrollTo(edge: .bottom)
-            })
+        content.environment(\.revealSubmitRow, RevealSubmitRow {
+            DispatchQueue.main.async {
+                scroller.scrollTo(QuestionSubmitRow.id, anchor: .bottom)
+            }
+        })
     }
 }
 
@@ -1735,20 +1853,36 @@ enum SpokenMaths {
 extension EnvironmentValues {
     /// The height `QuestionLayout` has for the question with the keyboard down, or 0 before it's been measured.
     @Entry var questionRoom: CGFloat = 0
+    /// The height `QuestionLayout` has for the question while the keyboard is up, or 0 while it's down. A bar of
+    /// shortcuts above a hardware keyboard on iPad doesn't count as the keyboard.
+    @Entry var roomAboveKeyboard: CGFloat = 0
     @Entry var revealSubmitRow = RevealSubmitRow(action: {})
 }
 
-/// See `fitOnScreen(by:usual:minimum:paused:)`.
+/// See `fitOnScreen(by:usual:minimum:paused:aboveKeyboard:)`.
 private struct FitOnScreen: ViewModifier {
     @Binding var height: CGFloat
     let usual: CGFloat
     let minimum: CGFloat
     let paused: Bool
-    @Environment(\.questionRoom) private var room
+    let aboveKeyboard: Bool
+    @Environment(\.questionRoom) private var roomWithoutKeyboard
+    @Environment(\.roomAboveKeyboard) private var roomAboveKeyboard
     @State private var questionHeight: CGFloat = 0
+
+    private var room: CGFloat {
+        aboveKeyboard ? roomAboveKeyboard : roomWithoutKeyboard
+    }
 
     func body(content: Content) -> some View {
         content
+            // The question is laid out and measured at the height it needs, not the height it's offered. When it
+            // fitted to within a fraction of a point, `QuestionLayout` offered it exactly the room, which could cut
+            // the last line off its words. It then measured a line shorter, so `height` grew, the question no longer
+            // fitted, `height` shrank again, and so on without end: Probability froze on an iPhone 17 Pro with large
+            // accessibility text. Nothing in the questions that use this stretches to fill the room, so they look
+            // the same.
+            .fixedSize(horizontal: false, vertical: true)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { newHeight in
                 questionHeight = newHeight
                 fit()
@@ -1756,18 +1890,70 @@ private struct FitOnScreen: ViewModifier {
             .onChange(of: room) {
                 fit()
             }
+            .onChange(of: usual) {
+                fit()
+            }
     }
 
     private func fit() {
         guard !paused, room > 0, questionHeight > 0 else { return }
         let spare = room - questionHeight
-        // Heights are whole points and only grow back for a couple of points or more, so rounding can't make the
-        // question flicker between two sizes.
-        guard spare < 0 || (spare >= 2 && height < usual) else { return }
+        // A fitted height is rounded down to a whole point and only grows back for a couple of points or more. As
+        // the question's height follows `height` without jumps (see `body`), it settles instead of flickering
+        // between two sizes. A height above a `usual` that has just become smaller comes down to it.
+        guard spare < 0 || height > usual || (spare >= 2 && height < usual) else { return }
         let fitted = (height + spare).rounded(.down)
-        let newHeight = fitted >= minimum ? min(usual, fitted) : usual
+        let newHeight = aboveKeyboard
+            ? min(usual, max(minimum, fitted))
+            : (fitted >= minimum ? min(usual, fitted) : usual)
         if newHeight != height {
             height = newHeight
+        }
+    }
+}
+
+/// See `compactWhileTyping(_:allowed:)`.
+private struct CompactWhileTyping: ViewModifier {
+    @Binding var isCompact: Bool
+    let allowed: Bool
+    @Environment(\.roomAboveKeyboard) private var roomAboveKeyboard
+    /// From the top of the question to the bottom of the row with Enter, as the question is usually laid out, without
+    /// the message after Enter, which only shows for a moment.
+    @State private var usualHeight: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .backgroundPreferenceValue(QuestionBounds.self) { bounds in
+                GeometryReader { proxy in
+                    let height = bounds.submitRow.map { submitRow in
+                        proxy[submitRow].maxY - (bounds.top.map { proxy[$0].minY } ?? 0)
+                    } ?? 0
+                    let isMessageShowing = bounds.message != nil
+
+                    Color.clear
+                        .onChange(of: height, initial: true) { _, height in
+                            if !isCompact, !isMessageShowing {
+                                usualHeight = height
+                            }
+                            update()
+                        }
+                }
+            }
+            .onChange(of: roomAboveKeyboard) {
+                update()
+            }
+            .onChange(of: allowed) {
+                update()
+            }
+    }
+
+    private func update() {
+        if roomAboveKeyboard == 0 || !allowed {
+            if isCompact {
+                isCompact = false
+            }
+        } else if usualHeight > roomAboveKeyboard + 0.5, !isCompact {
+            isCompact = true
         }
     }
 }
@@ -1781,15 +1967,44 @@ extension View {
     /// Marks the row with Enter and Skip, which `QuestionLayout` keeps above the keyboard.
     func questionSubmitRow() -> some View {
         id(QuestionSubmitRow.id)
+            .anchorPreference(key: QuestionBounds.self, value: .bounds) { QuestionBounds.Value(submitRow: $0) }
+    }
+
+    /// Marks the top of what must stay in view while the player types: the words, or a picture above them. See
+    /// `compactWhileTyping(_:allowed:)`.
+    func questionTop() -> some View {
+        anchorPreference(key: QuestionBounds.self, value: .bounds) { QuestionBounds.Value(top: $0) }
     }
 
     /// Fits a question on the screen with the keyboard down by making one tall part of it, such as a picture or the
     /// drawing pad, shorter. `height` is that part's height. While the question is too tall, `height` shrinks by
     /// just enough for it to fit, and once there's room again it grows back to `usual`. If fitting would take it
-    /// below `minimum`, it stays at `usual` and the question scrolls instead. Nothing changes while `paused`, such
-    /// as while the "Correct!" message makes the question taller for a moment.
-    func fitOnScreen(by height: Binding<CGFloat>, usual: CGFloat, minimum: CGFloat, paused: Bool) -> some View {
-        modifier(FitOnScreen(height: height, usual: usual, minimum: minimum, paused: paused))
+    /// below `minimum`, it stays at `usual` and the question scrolls instead. If `usual` changes, `height` follows it.
+    /// Nothing changes while `paused`, such as while the "Correct!" message makes the question taller for a moment.
+    ///
+    /// With `aboveKeyboard`, it fits the question in the room above the keyboard instead, and only while the keyboard
+    /// is up. There `height` never goes below `minimum`: if the question still doesn't fit, it scrolls.
+    ///
+    /// The question is always as tall as it needs to be, never stretched or squeezed to the height offered, so it
+    /// shouldn't contain anything that stretches to fill the room, such as a `Spacer`.
+    func fitOnScreen(by height: Binding<CGFloat>, usual: CGFloat, minimum: CGFloat, paused: Bool,
+                     aboveKeyboard: Bool = false) -> some View {
+        modifier(FitOnScreen(height: height, usual: usual, minimum: minimum, paused: paused,
+                             aboveKeyboard: aboveKeyboard))
+    }
+
+    /// Lays a question out more tightly while the keyboard is up, if it doesn't fit above the keyboard as it is.
+    /// `isCompact` turns on when the keyboard comes up and the question, from the top of `questionTop()` to the bottom
+    /// of `questionSubmitRow()`, is taller than the room left above it. The message after Enter isn't counted, as it
+    /// only shows for a moment and the question doesn't scroll for it while the keyboard is up (see `QuestionLayout`).
+    /// `isCompact` stays on until the keyboard goes down, or until the question can't be laid out tightly (`allowed`
+    /// is false), so the question doesn't switch back and forth while the player types. The activity decides what the
+    /// tighter layout is, such as a picture beside the answer box rather than above it.
+    ///
+    /// The answer boxes must keep their place in the activity's views as `isCompact` changes: inside an `AnyLayout`,
+    /// or outside the part that changes. A box that's replaced by a new one loses the keyboard.
+    func compactWhileTyping(_ isCompact: Binding<Bool>, allowed: Bool = true) -> some View {
+        modifier(CompactWhileTyping(isCompact: isCompact, allowed: allowed))
     }
 }
 
@@ -2125,7 +2340,9 @@ private struct ChosenBackgroundKey: EnvironmentKey {
 }
 
 extension EnvironmentValues {
-    /// Set by ContentView from GameData, so colours drawn on the background can be worked out from it.
+    /// Set from `GameData.chosenBackground` by `Maths_ManiaApp`, for the first loading screen, and by `ContentView`,
+    /// for every screen after it, so colours drawn on the background can be worked out from it. A view given nothing
+    /// gets the colour every player starts with.
     var chosenBackground: ChosenBackground {
         get { self[ChosenBackgroundKey.self] }
         set { self[ChosenBackgroundKey.self] = newValue }
@@ -2339,178 +2556,175 @@ let colours: [ShopColour] = [
 ]
 
 struct ShopView: View {
-    @State private var isSidebarOpen = false
-    @State private var pointsTakenString = ""
-    @State private var showMessagePoints = false
-    @State private var showMessageColour = false
-    @EnvironmentObject var gameData: GameData
-    @State private var colourMessage = ""
-    @State private var pointsMessage = ""
-    @State private var showAlert = false
-    @Environment(\.colorScheme) private var colorScheme
-    
-    var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                backgroundView
-                
-                VStack {
-                    NavigationBar(Back: false, Points: true, isSidebarOpen: $isSidebarOpen)
-                        .frame(maxWidth: .infinity)
-                        .edgesIgnoringSafeArea(.top)
-                        .padding(.top, UIScreen.main.bounds.height * 0.002)
-                    
-                    Spacer()
-                }
-                
-                VStack {
-                    Spacer()
-                    
-                    spendPointsSection
-                    
-                    Text("Background Colours")
-                        .font(.system(size: geometry.size.width * 0.06))
-                        .fontWeight(.bold)
-                        .foregroundStyle(.onBackground)
-                        .accessibilityAddTraits(.isHeader)
-                    
-                    ScrollView {
-                        VStack(spacing: geometry.size.height * 0.015) {
-                            ForEach(colours) { colour in
-                                HStack(spacing: geometry.size.width * 0.02) {
-                                    ForEach(colour.opacities) { opacityOption in
-                                        colourOptionView(colour: colour, opacityOption: opacityOption, geometry: geometry)
-                                    }
-                                }
-                            }
-                        }
-                        .padding(.horizontal, geometry.size.width * 0.03)
-                    }
-                    .frame(height: geometry.size.height * 0.5)
-                    
-                    Spacer()
-                }
-                
-                if showMessageColour {
-                    Text(colourMessage)
-                        .foregroundColor(messageColour)
-                        .font(.system(size: UIScreen.main.bounds.width * 0.1))
-                        .multilineTextAlignment(.center)
-                        .fontWeight(.bold)
-                        .padding()
-                        .cornerRadius(10)
-                        .onAppear { announce(colourMessage) }
-                }
-                
-                if showMessagePoints {
-                    Text(pointsMessage)
-                        .foregroundColor(messageColour)
-                        .font(.system(size: UIScreen.main.bounds.width * 0.1))
-                        .fontWeight(.bold)
-                        .multilineTextAlignment(.center)
-                        .padding()
-                        .cornerRadius(10)
-                        .onAppear { announce(pointsMessage) }
-                }
-            }
-            .sidebarOverlay(isOpen: $isSidebarOpen, selectedTab: "Shop")
-            .navigationBarBackButtonHidden(true)
+    /// A message about the last thing the child tried, shown next to it: under the Spend Points card, or under the row
+    /// of the colour that was tapped. It's part of the page, so it can never cover a swatch, and it stays until the
+    /// child does something else.
+    struct Message: Hashable {
+        enum Place: Hashable {
+            case spendPoints
+            /// Under the row of the colour with this hex code.
+            case colour(String)
         }
+
+        let text: String
+        let tone: StatusBanner.Tone
+        let place: Place
+        /// Counts the messages, so the same message twice is shown, and read out, again.
+        let serial: Int
     }
-    
-    /// The messages are large text, so they need 3:1. They stay black unless the background is too dark for it.
-    private var messageColour: Color {
-        Color(Contrast.blackOrWhite(on: Contrast.background(
-            hex: gameData.backgroundColourHex, opacity: gameData.backgroundOpacity, colorScheme: colorScheme), minimum: 3))
-    }
-    
-    private var backgroundView: some View {
-        Color(hex: gameData.backgroundColourHex)
-            .opacity(gameData.backgroundOpacity)
-            .ignoresSafeArea()
-    }
-    
-    private var spendPointsSection: some View {
-        VStack(spacing: 10) {
-            Text("Spend Points")
-                .font(.system(size: UIScreen.main.bounds.width * 0.06))
+
+    @State private var pointsTakenString = ""
+    @State private var message: Message?
+    @State private var messageCount = 0
+    @EnvironmentObject var gameData: GameData
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        FormScreen(selectedTab: "Shop", reveal: message.map { AnyHashable($0) }) {
+            ScreenTitle(title: "Shop", subtitle: "Spend points on background colours")
+
+            spendPointsCard
+
+            if let message, message.place == .spendPoints {
+                StatusBanner(message: message.text, tone: message.tone)
+                    .id(message)
+                    .transition(Self.messageTransition)
+            }
+
+            Text("Background Colours")
+                .scaledFont(size: 22, maximum: 34)
                 .fontWeight(.bold)
                 .foregroundStyle(.onBackground)
-                .frame(maxWidth: .infinity, alignment: .center)
+                .multilineTextAlignment(.center)
                 .accessibilityAddTraits(.isHeader)
-            
-            HStack(spacing: UIScreen.main.bounds.width * 0.03) {
-                TextField(answerBox: "Points to spend", text: $pointsTakenString)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .drawnOnWhite()
-                    .frame(width: UIScreen.main.bounds.width * 0.3)
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.04)
-                    .answerKeyboard(.numberPad)
-                    .accessibilityHint("Points you spend here are taken away.")
-                
-                Button(action: {
-                    hideKeyboard()
-                    handlePointsTransaction()
-                }) {
-                    Text("Enter")
-                        .scaledFont(size: UIScreen.main.bounds.width * 0.04)
-                        .padding(UIScreen.main.bounds.width * 0.02)
-                        .background(Color.white)
-                        .foregroundColor(.black)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                        // The white box is small, so the space around it can be tapped too.
-                        .frame(minWidth: 44, minHeight: 44)
-                        .contentShape(Rectangle())
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .center)
+
+            swatchGrid
+        }
+        // Typing a new number starts again, so the last message goes.
+        .onChange(of: pointsTakenString) { _, newValue in
+            if !newValue.isEmpty { clearMessage() }
         }
     }
-    
-    private func colourOptionView(colour: ShopColour, opacityOption: ShopOpacity, geometry: GeometryProxy) -> some View {
+
+    private var spendPointsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Spend Points")
+                .scaledFont(size: 22, maximum: 34)
+                .fontWeight(.bold)
+                .foregroundStyle(.cardWords)
+                .accessibilityAddTraits(.isHeader)
+
+            spendPointsLayout {
+                TextField(answerBox: "Points to spend", text: $pointsTakenString)
+                    .scaledFont(size: 20, maximum: 34)
+                    .formTextBox()
+                    .frame(maxWidth: .infinity)
+                    .answerKeyboard(.numberPad)
+                    .accessibilityHint("Points you spend here are taken away.")
+
+                Button("Enter") {
+                    hideKeyboard()
+                    handlePointsTransaction()
+                }
+                .buttonStyle(FilledButtonStyle())
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card()
+        .formSubmitRow()
+    }
+
+    /// The box and Enter side by side, or Enter under the box at the largest text sizes, where both don't fit on a line.
+    private var spendPointsLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(spacing: 12))
+    }
+
+    /// Every colour, as a row of its four strengths. Not a lazy stack, so every swatch is always there for VoiceOver.
+    private var swatchGrid: some View {
+        VStack(spacing: 12) {
+            ForEach(colours) { colour in
+                VStack(spacing: 10) {
+                    HStack(spacing: 10) {
+                        ForEach(colour.opacities) { opacityOption in
+                            colourOptionView(colour: colour, opacityOption: opacityOption)
+                        }
+                    }
+
+                    if let message, message.place == .colour(colour.hexCode) {
+                        StatusBanner(message: message.text, tone: message.tone)
+                            .id(message)
+                            .transition(Self.messageTransition)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Big enough to see the colour and to tap, four to a row: 56 points on the smallest iPhone, 90 on iPad.
+    static var swatchSide: CGFloat {
+        max(56, Metrics.contentWidth * 0.15)
+    }
+
+    private func colourOptionView(colour: ShopColour, opacityOption: ShopOpacity) -> some View {
         let isUnlocked = gameData.isColourUnlocked(colour.hexCode, opacity: opacityOption.opacity)
         let isSelected = gameData.isColourSelected(colour.hexCode, opacity: opacityOption.opacity)
-        let swatch = Self.swatchColour(colour, opacityOption, on: Contrast.background(
-            hex: gameData.backgroundColourHex, opacity: gameData.backgroundOpacity, colorScheme: colorScheme))
-        
-        return Button(action: {
+        // As the colour will look once it's chosen: every screen draws its colour over the system's white, or black
+        // in dark mode. Drawn solid, so the colour chosen now doesn't show through and change how it looks.
+        let swatch = Self.swatchColour(colour, opacityOption, on: colorScheme == .dark ? Contrast.black : Contrast.white)
+        let side = Self.swatchSide
+        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+
+        return Button {
             if isUnlocked {
+                clearMessage()
                 selectColour(colour: colour, opacityOption: opacityOption)
             } else {
                 purchaseColour(colour: colour, opacityOption: opacityOption)
             }
-        }) {
-            ZStack {
-                RoundedRectangle(cornerRadius: geometry.size.width * 0.02)
-                    .fill(Color(hex: colour.hexCode).opacity(opacityOption.opacity))
-                    .frame(width: geometry.size.width * 0.12, height: geometry.size.width * 0.12)
-                    .overlay {
-                        if isSelected {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(Color(Contrast.blackOrWhite(on: swatch, minimum: 3)))
-                                .font(.title)
-                        } else if isUnlocked {
-                            Image(systemName: "checkmark.circle")
-                                .foregroundColor(Color(Contrast.readableGrey(on: swatch, minimum: 3)))
-                                .font(.title2)
-                        }
+        } label: {
+            shape
+                .fill(Color(swatch))
+                .overlay { shape.strokeBorder(swatchEdge, lineWidth: 1.5) }
+                .frame(width: side, height: side)
+                .overlay {
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: side * 0.5, weight: .semibold))
+                            .foregroundStyle(Color(Contrast.blackOrWhite(on: swatch, minimum: 3)))
+                    } else if isUnlocked {
+                        Image(systemName: "checkmark.circle")
+                            .font(.system(size: side * 0.43, weight: .semibold))
+                            .foregroundStyle(Color(Contrast.readableGrey(on: swatch, minimum: 3)))
+                    } else {
+                        Text(Self.priceText(opacityOption.price))
+                            .scaledFont(size: side * 0.27, maximum: side * 0.36)
+                            .fontWeight(.bold)
+                            .foregroundStyle(Color(Self.priceColour(on: swatch)))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                            .padding(.horizontal, 4)
                     }
-                
-                if !isUnlocked {
-                    Text(Self.priceText(opacityOption.price))
-                        .font(.system(size: geometry.size.width * 0.03))
-                        .fontWeight(.bold)
-                        .foregroundColor(Color(Self.priceColour(on: swatch)))
                 }
-            }
+                .contentShape(shape)
         }
+        .buttonStyle(.plain)
         .accessibilityLabel(Self.accessibilityName(of: colour, opacityOption))
         .accessibilityValue(isSelected ? "Selected" : isUnlocked ? "Unlocked" : Self.lockedDescription(price: opacityOption.price))
         .accessibilityHint(isSelected ? "" : isUnlocked ? "Makes this the background colour." : "Unlocks this colour.")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    /// The swatch as it is seen: its colour at its strength, on the shop's own background.
+    /// The edge round each swatch, so a pale swatch can be told apart from a pale background: 3:1 on the background.
+    private var swatchEdge: Color {
+        Color(Contrast.readableGrey(on: Contrast.background(
+            hex: gameData.backgroundColourHex, opacity: gameData.backgroundOpacity, colorScheme: colorScheme), minimum: 3))
+    }
+
+    /// The swatch as it is seen: its colour at its strength, on what's behind it.
     static func swatchColour(_ colour: ShopColour, _ opacityOption: ShopOpacity, on background: Contrast.RGB) -> Contrast.RGB {
         Contrast.composite(Contrast.rgb(hex: colour.hexCode), opacity: opacityOption.opacity, over: background)
     }
@@ -2537,207 +2751,248 @@ struct ShopView: View {
     static func accessibilityName(of colour: ShopColour, _ opacityOption: ShopOpacity) -> String {
         "\(colour.name), \(Int((opacityOption.opacity * 100).rounded())) percent"
     }
-    
+
+    // MARK: Messages. Each says what happened and, where it's about points, how many the child has, so it's clear
+    // what to do next.
+
+    /// The number is written as the header writes it, grouped the way the device's language groups it: "1,234" in English.
+    static func pointsText(_ count: Int) -> String {
+        count == 1 ? "1 point" : "\(count.formatted()) points"
+    }
+
+    static func percent(_ opacityOption: ShopOpacity) -> Int {
+        Int((opacityOption.opacity * 100).rounded())
+    }
+
+    static func notEnoughPointsMessage(for colour: ShopColour, _ opacityOption: ShopOpacity, points: Int) -> String {
+        "Not enough points! \(colour.name) \(percent(opacityOption))% costs \(pointsText(opacityOption.price)). "
+            + "You have \(pointsText(points))."
+    }
+
+    /// Buying a colour doesn't choose it, so the message says how to.
+    static func unlockedMessage(for colour: ShopColour, _ opacityOption: ShopOpacity) -> String {
+        "\(colour.name) \(percent(opacityOption))% unlocked! Tap it again to use it."
+    }
+
+    static let cannotBuyMessage = "That colour can't be bought."
+
+    static let invalidPointsMessage = "Please enter a valid number of points."
+
+    static func notEnoughToSpendMessage(points: Int) -> String {
+        "Not enough points. You have \(pointsText(points))."
+    }
+
+    static func spentMessage(_ spent: Int, left: Int) -> String {
+        "\(pointsText(spent)) taken. You have \(pointsText(left)) left."
+    }
+
     private func handlePointsTransaction() {
         guard let pointsTaken = Int(pointsTakenString), pointsTaken > 0 else {
-            showMessagePoints = true
-            pointsMessage = "Please enter a valid number of points."
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                showMessagePoints = false
-            }
+            show(Self.invalidPointsMessage, .problem, at: .spendPoints)
             return
         }
-        
+
         if pointsTaken > gameData.points {
-            showMessagePoints = true
-            pointsMessage = "Not enough points."
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                showMessagePoints = false
-            }
+            show(Self.notEnoughToSpendMessage(points: gameData.points), .problem, at: .spendPoints)
             return
         }
-        
+
         gameData.spendPoints(pointsTaken)
-        showMessagePoints = true
-        pointsMessage = "\(pointsTaken) \(pointsTaken == 1 ? "point" : "points") taken."
         pointsTakenString = ""
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            showMessagePoints = false
-        }
+        show(Self.spentMessage(pointsTaken, left: gameData.points), .success, at: .spendPoints)
     }
-    
+
     private func selectColour(colour: ShopColour, opacityOption: ShopOpacity) {
         gameData.selectColour(hex: colour.hexCode, opacity: opacityOption.opacity)
     }
-    
+
     private func purchaseColour(colour: ShopColour, opacityOption: ShopOpacity) {
         switch gameData.purchaseColour(hex: colour.hexCode, opacity: opacityOption.opacity, price: opacityOption.price) {
         case .purchased:
-            colourMessage = "\(colour.name) unlocked!"
+            show(Self.unlockedMessage(for: colour, opacityOption), .success, at: .colour(colour.hexCode))
         case .alreadyUnlocked:
             // A second tap before the screen redrew: it is already paid for, so it is just selected.
+            clearMessage()
             selectColour(colour: colour, opacityOption: opacityOption)
-            return
-        case .notEnoughPoints, .invalidPrice:
-            colourMessage = "Not enough points!"
+        case .notEnoughPoints:
+            show(Self.notEnoughPointsMessage(for: colour, opacityOption, points: gameData.points), .problem,
+                 at: .colour(colour.hexCode))
+        case .invalidPrice:
+            show(Self.cannotBuyMessage, .problem, at: .colour(colour.hexCode))
         }
-        showMessageColour = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            showMessageColour = false
-        }
+    }
+
+    /// A new message fades in, and the last one goes at once, so two are never on the page together.
+    static let messageTransition = AnyTransition.asymmetric(insertion: .opacity.animation(.default), removal: .identity)
+
+    /// The page isn't animated as the message goes in, only the message's fade. So the rows below it are already in
+    /// their new places when `FormScreen` scrolls the message into view: while the page was still sliding, a message
+    /// under the last colours was left cut off at the bottom of the screen.
+    private func show(_ text: String, _ tone: StatusBanner.Tone, at place: Message.Place) {
+        messageCount += 1
+        message = Message(text: text, tone: tone, place: place, serial: messageCount)
+    }
+
+    private func clearMessage() {
+        message = nil
     }
 }
 
 struct FeedbackView: View {
     static let privacyReminder = "Please don't write your name, school, address or anything else about you."
 
-    @State private var feedbackText: String = ""
-    @State private var showMessage = false
-    @State private var isSidebarOpen: Bool = false
-    @State private var isOffline = false
-    @State private var navigationBarBottom: CGFloat = 0
-    @EnvironmentObject var gameData: GameData
-    
-    private let db = Firestore.firestore()
-    
-    var body: some View {
-        ZStack {
-            Color(hex: gameData.backgroundColourHex).opacity(gameData.backgroundOpacity)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    hideKeyboard()
-                }
-            
-            VStack {
-                NavigationBar(Back: false, Points: true, isSidebarOpen: $isSidebarOpen)
-                    .frame(maxWidth: .infinity)
-                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { navigationBarBottom = $0 }
-                    .edgesIgnoringSafeArea(.top)
-                    .padding(.top, UIScreen.main.bounds.height * 0.002)
-                Spacer()
-            }
-            
-            VStack {
-                Spacer(minLength: 0)
+    /// What happened when Enter was last pressed. It's shown under the box until the child types again.
+    enum SendStatus: Equatable {
+        case empty, sending, failed, sent
 
-                // Given its room before the box, as before. If it can't all fit above the smallest box and Enter, as
-                // at the largest text sizes with the keyboard up on a small iPhone, it scrolls instead of pushing
-                // Enter down under the keyboard.
-                ViewThatFits(in: .vertical) {
-                    heading
-                    ScrollView {
-                        heading
-                    }
-                }
-                .layoutPriority(2)
-
-                ZStack(alignment: .topLeading) {
-                    // A square box, which gets shorter when the keyboard comes up so Enter stays above it.
-                    TextEditor(text: $feedbackText)
-                        .frame(width: UIScreen.main.bounds.width * 0.75)
-                        .frame(minHeight: 50, maxHeight: UIScreen.main.bounds.width * 0.75)
-                        .padding()
-                        .background(Color.white)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                        .font(.system(size: UIScreen.main.bounds.width * 0.075))
-                        .accessibilityLabel("Your feedback")
-                }
-                .layoutPriority(1)
-                
-                if showMessage {
-                    Text(isOffline ? "No internet connection!" : "Feedback submitted!")
-                        .foregroundStyle(isOffline ? .largeRedOnBackground : .largeGreenOnBackground)
-                        .font(.system(size: UIScreen.main.bounds.width * 0.05))
-                        .fontWeight(.bold)
-                        .padding()
-                        .transition(.opacity)
-                        .onAppear { announce(isOffline ? "No internet connection!" : "Feedback submitted!") }
-                }
-                
-                Button {
-                    hideKeyboard()
-                    checkInternetConnection {
-                        if isOffline {
-                            showMessage = true
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                                showMessage = false
-                            }
-                        } else {
-                            submitFeedback()
-                        }
-                    }
-                } label: {
-                    Text("Enter")
-                        .background(Color.white)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.015)
-                        // The white box is only as tall as the word, so the space around it can be tapped too.
-                        .frame(minWidth: 44, minHeight: 44)
-                        .contentShape(Rectangle())
-                }
-                .foregroundColor(.black)
-                .font(.system(size: UIScreen.main.bounds.width * 0.075))
-                .multilineTextAlignment(.center)
-                .fontWeight(.bold)
+        var message: String {
+            switch self {
+            case .empty: "Please type a message first."
+            case .sending: "Sending…"
+            case .failed: "That didn't send. Check the internet and try again."
+            case .sent: "Thank you! Your message was sent."
             }
-            // Below the navigation bar, so the title can't be pushed up over it when the keyboard is up. The bar reaches
-            // up behind the status bar, so this starts from the top of the screen too. The gap at the bottom keeps Enter
-            // off the edge of the keyboard.
-            .padding(.top, navigationBarBottom)
-            .padding(.bottom, 12)
-            .ignoresSafeArea(.container, edges: .top)
-            
-            Spacer()
         }
-        .sidebarOverlay(isOpen: $isSidebarOpen, selectedTab: "Feedback")
-        .navigationBarBackButtonHidden(true)
+
+        var tone: StatusBanner.Tone {
+            switch self {
+            case .empty, .sending: .information
+            case .failed: .problem
+            case .sent: .success
+            }
+        }
+    }
+
+    @State private var feedbackText: String = ""
+    @State private var isOffline = false
+    /// From Enter until Firestore answers, so the same message can't be sent twice.
+    @State private var isSending = false
+    /// While the connection is checked, so its answer is acted on only once.
+    @State private var isChecking = false
+    @State private var status: SendStatus?
+    /// Counts the messages, so the same one twice is read out again.
+    @State private var statusCount = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private let db = Firestore.firestore()
+
+    var body: some View {
+        FormScreen(selectedTab: "Feedback", scrolls: false) {
+            // Given its room before the box, as before. If it can't all fit above the smallest box and Enter, as
+            // at the largest text sizes with the keyboard up on a small iPhone, it scrolls instead of pushing
+            // Enter down under the keyboard.
+            ViewThatFits(in: .vertical) {
+                heading
+                ScrollView {
+                    heading
+                }
+            }
+            .layoutPriority(2)
+
+            VStack(spacing: 12) {
+                // A box that gets shorter when the keyboard comes up, so Enter stays above it.
+                TextEditor(text: $feedbackText)
+                    .scaledFont(size: 20, maximum: 34)
+                    .foregroundStyle(.black)
+                    .scrollContentBackground(.hidden)
+                    .padding(8)
+                    .frame(minHeight: 50, maxHeight: Metrics.contentWidth * 0.6)
+                    .background(.white, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(.cardQuietWords, lineWidth: 1)
+                            .allowsHitTesting(false)
+                    }
+                    // White in dark mode too, with the cursor and edge made for white.
+                    .drawnOnWhite()
+                    .accessibilityLabel("Your feedback")
+
+                Button("Enter") { send() }
+                    .buttonStyle(FilledButtonStyle())
+            }
+            .padding(16)
+            .card()
+            .layoutPriority(1)
+
+            if let status {
+                StatusBanner(message: status.message, tone: status.tone).id(statusCount)
+            }
+        }
+        // Typing again starts again, so the last message goes. "Sending…" stays until Firestore answers.
+        .onChange(of: feedbackText) { _, newText in
+            if !newText.isEmpty, status != nil, !isSending {
+                withAnimation(reduceMotion ? nil : .default) { status = nil }
+            }
+        }
     }
 
     private var heading: some View {
-        VStack {
-            Text("Feedback")
-                .font(.system(size: UIScreen.main.bounds.width * 0.08))
-                .fontWeight(.bold)
-                .foregroundStyle(.onBackground)
-                .padding()
-                .underline()
-                .accessibilityAddTraits(.isHeader)
+        VStack(spacing: 12) {
+            ScreenTitle(title: "Feedback")
 
             // Feedback is stored without any name or ID, so ask children not to type personal details into it.
             Text(FeedbackView.privacyReminder)
-                .scaledFont(size: UIScreen.main.bounds.width * 0.04, maximum: 28)
+                .scaledFont(size: Metrics.contentWidth * 0.04, maximum: 28)
                 .foregroundStyle(.onBackground)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal)
+        }
+    }
+
+    private func send() {
+        hideKeyboard()
+
+        // Spaces and empty lines alone aren't a message.
+        guard !feedbackText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            show(.empty)
+            return
+        }
+        // Already on its way.
+        guard !isSending else {
+            show(.sending)
+            return
+        }
+
+        isSending = true
+        isChecking = true
+        show(.sending)
+        checkInternetConnection {
+            guard isChecking else { return }
+            isChecking = false
+            if isOffline {
+                isSending = false
+                show(.failed)
+            } else {
+                submitFeedback()
+            }
         }
     }
 
     private func submitFeedback() {
-        hideKeyboard()
-        
-        if !feedbackText.isEmpty {
-            let feedbackData: [String: Any] = [
-                "text": feedbackText,
-                "timestamp": Timestamp()
-            ]
-            
-            db.collection("feedbacks").addDocument(data: feedbackData) { error in
-                if error == nil {
+        let sent = feedbackText
+        let feedbackData: [String: Any] = [
+            "text": feedbackText,
+            "timestamp": Timestamp()
+        ]
+
+        db.collection("feedbacks").addDocument(data: feedbackData) { error in
+            isSending = false
+            if error == nil {
+                // Unless more was typed while it was sending, which is kept.
+                if feedbackText == sent {
                     feedbackText = ""
-                    showMessage = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        showMessage = false
-                    }
                 }
+                show(.sent)
+            } else {
+                show(.failed)
             }
         }
     }
-    
+
     private func checkInternetConnection(completion: @escaping () -> Void) {
         let monitor = NWPathMonitor()
         let queue = DispatchQueue.global(qos: .background)
-        monitor.start(queue: queue)
-        
+        // Set before the monitor starts, so its first answer can't arrive before there's anything to hear it.
         monitor.pathUpdateHandler = { path in
             DispatchQueue.main.async {
                 isOffline = path.status != .satisfied
@@ -2745,52 +3000,33 @@ struct FeedbackView: View {
                 monitor.cancel()
             }
         }
+        monitor.start(queue: queue)
+    }
+
+    private func show(_ newStatus: SendStatus) {
+        statusCount += 1
+        withAnimation(reduceMotion ? nil : .default) { status = newStatus }
     }
 }
 
 struct InformationView: View {
-    @State private var isSidebarOpen: Bool = false
     @EnvironmentObject var gameData: GameData
     @State private var message: String = ""
-    @State private var navigationBarHeight: CGFloat = 0
-    
+
     var body: some View {
-        ZStack {
-            Color(hex: gameData.backgroundColourHex).opacity(gameData.backgroundOpacity)
-                .ignoresSafeArea()
-                .onTapGesture { hideKeyboard() }
+        FormScreen(selectedTab: "Information") {
+            ScreenTitle(title: "Information")
 
-            VStack {
-                NavigationBar(Back: false, Points: true, isSidebarOpen: $isSidebarOpen)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, UIScreen.main.bounds.height * 0.002)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { navigationBarHeight = $0 }
-                Spacer()
-            }
-
-            // The message stays in the middle of the screen. Larger text sizes can make it too tall to fit
-            // between the header and the bottom of the screen, so then it scrolls instead.
-            ViewThatFits(in: .vertical) {
-                messageText
-                ScrollView { messageText }
-            }
-            .padding(.vertical, navigationBarHeight)
-            
-            Spacer()
-            
-            .onAppear { loadMessage() }
+            Text(message)
+                .scaledFont(size: 20, maximum: 34)
+                .fontWeight(.medium)
+                .foregroundStyle(.cardWords)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(20)
+                .card()
         }
-        .sidebarOverlay(isOpen: $isSidebarOpen, selectedTab: "Information")
-        .navigationBarBackButtonHidden(true)
-    }
-
-    private var messageText: some View {
-        Text(message)
-            .scaledFont(size: UIScreen.main.bounds.width * 0.05)
-            .foregroundStyle(.onBackground)
-            .fontWeight(.bold)
-            .padding()
-            .multilineTextAlignment(.center)
+        .onAppear { loadMessage() }
     }
 
     private func loadMessage() {
@@ -2813,242 +3049,172 @@ struct InformationView: View {
 
 struct RemoveAdsView: View {
     @StateObject var purchaseManager = PurchaseManager.shared
-    @State private var isSidebarOpen: Bool = false
-    @EnvironmentObject var gameData: GameData
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        ZStack {
-            Color(hex: gameData.backgroundColourHex)
-                .opacity(gameData.backgroundOpacity)
-                .ignoresSafeArea()
+        FormScreen(selectedTab: "Remove Ads") {
+            ScreenTitle(title: "Remove Ads")
 
-            VStack {
-                NavigationBar(Back: false, Points: true, isSidebarOpen: $isSidebarOpen)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, UIScreen.main.bounds.height * 0.002)
-                
-                Spacer()
-            }
-
-            VStack(spacing: 20) {
-                Text("Remove Ads")
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.04)
-                    .fontWeight(.bold)
-                    .foregroundStyle(.onBackground)
-                    .accessibilityAddTraits(.isHeader)
-                
+            Group {
                 if purchaseManager.adsRemoved {
-                    Text("✅ Ads removed! Thank you.")
-                        .foregroundStyle(.greenOnBackground)
-                        .scaledFont(size: UIScreen.main.bounds.width * 0.04)
-                        .fontWeight(.bold)
-                        // VoiceOver would read the emoji as "check mark button".
-                        .accessibilityLabel("Ads removed! Thank you.")
-                    
+                    StatusBanner(message: "Ads removed! Thank you.", tone: .success)
                 } else {
-                    if let product = purchaseManager.product {
-                        Button("Buy - \(product.displayPrice)") {
-                            Task { await purchaseManager.buyRemoveAds() }
-                        }
-                        .frame(
-                            minWidth: UIScreen.main.bounds.width * 0.3,
-                            minHeight: UIScreen.main.bounds.height * 0.07
-                        )
-                        .scaledFont(size: UIScreen.main.bounds.width * 0.04)
-                        .fontWeight(.bold)
-                        .padding()
-                        .background(Color.buttonGreen)
-                        .foregroundColor(.white)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
+                    VStack(spacing: 16) {
+                        if let product = purchaseManager.product {
+                            Button("Buy - \(product.displayPrice)") {
+                                Task { await purchaseManager.buyRemoveAds() }
+                            }
+                            .buttonStyle(FilledButtonStyle(colour: .buttonGreen))
+                        } else if purchaseManager.productLoadFailed {
+                            Text("Couldn't load Remove Ads from the App Store.")
+                                .scaledFont(size: 18, maximum: 28)
+                                .foregroundStyle(.cardWords)
+                                .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
 
-                    } else if purchaseManager.productLoadFailed {
-                        Text("Couldn't load Remove Ads from the App Store.")
-                            .foregroundStyle(.onBackground)
-                            .multilineTextAlignment(.center)
-
-                        Button("Try Again") {
-                            Task { await purchaseManager.fetchProducts() }
+                            Button("Try Again") {
+                                Task { await purchaseManager.fetchProducts() }
+                            }
+                            .buttonStyle(FilledButtonStyle(colour: .buttonGreen))
+                        } else {
+                            ProgressView("Loading price...")
+                                .tint(Color(CardColour.rgb(.quietWords, in: colorScheme)))
+                                .foregroundStyle(.cardWords)
                         }
-                        .padding()
-                        .background(Color.buttonGreen)
-                        .foregroundColor(.white)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                    } else {
-                        ProgressView("Loading price...")
-                            .tint(ReadableOnBackground.onBackground)
-                            .foregroundStyle(.onBackground)
+
+                        Button("Restore Purchases") {
+                            Task {
+                                await purchaseManager.restorePurchases()
+                            }
+                        }
+                        .buttonStyle(FilledButtonStyle(colour: .buttonGrey))
                     }
-
-                    Button("Restore Purchases") {
-                        Task {
-                            await purchaseManager.restorePurchases()
-                        }
-                    }
-                    .padding()
-                    .background(Color.black)
-                    .foregroundColor(.white)
-                    .cornerRadius(UIScreen.main.bounds.width * 0.02)
+                    .padding(20)
+                    .frame(maxWidth: .infinity)
+                    .card()
                 }
 
                 if let message = purchaseManager.statusMessage {
-                    Text(message)
-                        .foregroundStyle(.onBackground)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                        .onAppear { announce(message) }
-                        .onChange(of: message) { _, newMessage in announce(newMessage) }
+                    StatusBanner(message: message, tone: .information)
                 }
             }
             .disabled(purchaseManager.isBusy)
-            .onAppear {
-                purchaseManager.clearStatusMessage()
-                Task { await purchaseManager.fetchProducts() }
-            }
-            .padding()
         }
-        .sidebarOverlay(isOpen: $isSidebarOpen, selectedTab: "Remove Ads")
-        .navigationBarBackButtonHidden(true)
+        .onAppear {
+            purchaseManager.clearStatusMessage()
+            Task { await purchaseManager.fetchProducts() }
+        }
     }
 }
 
 struct SettingsView: View {
     @State private var name: String = ""
-    @State private var isSidebarOpen: Bool = false
+    @State private var showsSaved = false
+    /// Counts the saves, so saving again reads "Name saved." out again.
+    @State private var saves = 0
     @EnvironmentObject var gameData: GameData
-    @State private var showMessage: Bool = false
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        ZStack {
-            Color(hex: gameData.backgroundColourHex).opacity(gameData.backgroundOpacity)
-                .ignoresSafeArea()
-                .onTapGesture { hideKeyboard() }
+        FormScreen(selectedTab: "Settings") {
+            ScreenTitle(title: "Settings")
 
-            VStack {
-                NavigationBar(Back: false, Points: true, isSidebarOpen: $isSidebarOpen)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, UIScreen.main.bounds.height * 0.002)
+            nameCard
 
-                Spacer()
+            if showsSaved {
+                StatusBanner(message: "Name saved.", tone: .success).id(saves)
             }
-            
-            VStack{
-                Text("Settings")
-                    .font(.system(size: UIScreen.main.bounds.width * 0.1))
-                    .underline()
-                    .foregroundStyle(.onBackground)
-                    .fontWeight(.bold)
-                    .padding()
-                    .accessibilityAddTraits(.isHeader)
-                
-                Spacer()
-            }
-            
-            VStack{
-                Spacer()
-                
-                Text("Name")
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
-                    .fontWeight(.bold)
-                    .foregroundStyle(.onBackground)
-                    .underline()
-                    .padding()
-                    .accessibilityAddTraits(.isHeader)
 
-                TextField(
-                    "",
-                    text: $name,
-                    prompt: Text(gameData.username.isEmpty ? "Enter your name" : gameData.username)
-                        .foregroundColor(.black)
-                )
-                .onSubmit {
-                    if !name.trimmingCharacters(in: .whitespaces).isEmpty {
-                        gameData.username = name
-                        gameData.saveData()
-                        showFeedback()
-                    }
-                }
-                .font(.system(size: UIScreen.main.bounds.width * 0.05))
-                .multilineTextAlignment(.center)
-                .foregroundColor(.black)
-                .answerBoxMargin()
-                .frame(
-                    width: UIScreen.main.bounds.width * 0.8,
-                    height: max(UIScreen.main.bounds.height * 0.06, 44)
-                )
-                .background(Color.white)
-                .cornerRadius(10)
-                .textFieldStyle(PlainTextFieldStyle())
-                .accessibilityLabel("Name")
-
-                if showMessage {
-                    Text("Name Saved")
-                        .foregroundStyle(.largeGreenOnBackground)
-                        .font(.system(size: UIScreen.main.bounds.width * 0.075))
-                        .fontWeight(.bold)
-                        .padding()
-                        .transition(.opacity)
-                        .onAppear { announce("Name Saved") }
-                }
-                
-                Button(action: {
-                    gameData.username = name
-                    gameData.saveData()
-                    showFeedback()
-                }) {
-                    Text("Enter")
-                        .padding()
-                        .frame(
-                            width: UIScreen.main.bounds.width * 0.4,
-                            height: max(UIScreen.main.bounds.height * 0.06, 44)
-                        )
-                        .font(.system(size: UIScreen.main.bounds.width * 0.05))
-                        .fontWeight(.bold)
-                        .background(Color.white)
-                        .foregroundColor(.black)
-                        .cornerRadius(8)
-                }
-                .padding(.bottom, 20)
-
-                Spacer()
-                Text("SFX Volume")
-                    .fontWeight(.bold)
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
-                    .foregroundStyle(.onBackground)
-                    .underline()
-                    .padding()
-                    .accessibilityAddTraits(.isHeader)
-
-                Slider(value: $gameData.sfxvolume, in: 0...1, onEditingChanged: { _ in
-                    gameData.saveData()
-                })
-                .tint(ReadableOnBackground.onBackground)
-                .accessibilityLabel("Sound effects volume")
-                .frame(width: UIScreen.main.bounds.width / 1.5)
-                .padding()
-                
-                Spacer()
+            volumeCard
+        }
+        // Typing again starts again, so "Name saved." goes.
+        .onChange(of: name) { _, _ in
+            if showsSaved {
+                withAnimation(reduceMotion ? nil : .default) { showsSaved = false }
             }
         }
-        .sidebarOverlay(isOpen: $isSidebarOpen, selectedTab: "Settings")
         .onAppear {
             name = gameData.username
         }
         // VoiceOver moves the slider without dragging it, so `onEditingChanged` might not save its volume.
         .onDisappear { gameData.saveData() }
-        .navigationBarBackButtonHidden(true)
     }
-    
-    private func showFeedback() {
-        withAnimation {
-            showMessage = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            withAnimation {
-                showMessage = false
+
+    private var nameCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Name")
+                .scaledFont(size: 22, maximum: 34)
+                .fontWeight(.bold)
+                .foregroundStyle(.cardWords)
+                .accessibilityAddTraits(.isHeader)
+
+            TextField(
+                "",
+                text: $name,
+                prompt: Text(gameData.username.isEmpty ? "Enter your name" : gameData.username)
+                    .foregroundColor(.placeholderGrey)
+            )
+            .onSubmit {
+                if !name.trimmingCharacters(in: .whitespaces).isEmpty {
+                    gameData.username = name
+                    gameData.saveData()
+                    showSaved()
+                }
             }
+            .scaledFont(size: Metrics.contentWidth * 0.05, maximum: 34)
+            .formTextBox()
+            .frame(maxWidth: .infinity)
+            .accessibilityLabel("Name")
+
+            Button("Enter") {
+                hideKeyboard()
+                gameData.username = name
+                gameData.saveData()
+                showSaved()
+            }
+            .buttonStyle(FilledButtonStyle())
+            .frame(maxWidth: .infinity)
         }
+        .padding(16)
+        .card()
+        .formSubmitRow()
     }
-    
+
+    private var volumeCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("SFX Volume")
+                .scaledFont(size: 22, maximum: 34)
+                .fontWeight(.bold)
+                .foregroundStyle(.cardWords)
+                .accessibilityAddTraits(.isHeader)
+
+            HStack(spacing: 12) {
+                Image(systemName: "speaker.fill")
+                    .foregroundStyle(.cardQuietWords)
+                    .accessibilityHidden(true)
+
+                Slider(value: $gameData.sfxvolume, in: 0...1, onEditingChanged: { _ in
+                    gameData.saveData()
+                })
+                .tint(Color(CardColour.rgb(.accent, in: colorScheme)))
+                .accessibilityLabel("Sound effects volume")
+
+                Image(systemName: "speaker.wave.3.fill")
+                    .foregroundStyle(.cardQuietWords)
+                    .accessibilityHidden(true)
+            }
+            .scaledFont(size: 20, maximum: 30)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card()
+    }
+
+    private func showSaved() {
+        saves += 1
+        withAnimation(reduceMotion ? nil : .default) { showsSaved = true }
+    }
 }
 
 struct MainMenuView: View {
@@ -3062,95 +3228,53 @@ struct MainMenuView: View {
                 .onTapGesture {
                     hideKeyboard()
                 }
-            
-            VStack {
-                ZStack {
-                    NavigationBar(Back: false, Points: false, isSidebarOpen: $isSidebarOpen)
-                        .frame(maxWidth: .infinity)
-                        .edgesIgnoringSafeArea(.top)
-                        .padding(.top, UIScreen.main.bounds.height * 0.002)
-                    
-                    Text("Maths Quest")
-                        .font(.system(size: UIScreen.main.bounds.width * 0.1))
-                        .foregroundStyle(.onBackground)
-                        .fontWeight(.bold)
-                        .underline()
-                        .frame(maxWidth: .infinity)
-                        .accessibilityAddTraits(.isHeader)
+
+            VStack(spacing: 0) {
+                NavigationBar(Back: false, Points: true, isSidebarOpen: $isSidebarOpen)
+                    .frame(maxWidth: .infinity)
+                    .edgesIgnoringSafeArea(.top)
+                    .padding(.top, UIScreen.main.bounds.height * 0.002)
+
+                ScrollsIfNeeded {
+                    VStack(spacing: 24) {
+                        ScreenTitle(title: "Maths Quest", subtitle: "Choose your year")
+                        // Two columns at every text size, so all six years can be seen without scrolling.
+                        EqualCardGrid(columns: 2) {
+                            ForEach(1...6, id: \.self) { year in
+                                MenuCardButton(screen: .year(year), title: "Year \(year)",
+                                               subtitle: SchoolYear.ages(year),
+                                               spokenSubtitle: SchoolYear.spokenAges(year),
+                                               contents: Activity.activities(inYear: year).map(\.icon),
+                                               titleSize: Metrics.contentWidth * 0.09,
+                                               minHeight: UIScreen.main.bounds.height * 0.14)
+                            }
+                        }
+                        .disabled(isSidebarOpen)
+                    }
+                    .padding()
+                    .readableColumn()
                 }
-                
-                Spacer()
-                
-                Text("Points: \(gameData.points)")
-                    .font(.system(size: UIScreen.main.bounds.width * 0.1))
-                    .foregroundStyle(.onBackground)
-                    .fontWeight(.bold)
             }
-            VStack(spacing: UIScreen.main.bounds.height * 0.08) {
-                Spacer()
-                
-                HStack {
-                    ScreenButton(to: .year(1)) {
-                        menuButton(title: "Year 1")
-                    }
-                                        
-                    ScreenButton(to: .year(2)) {
-                        menuButton(title: "Year 2")
-                    }
-                }
-                                
-                HStack {
-                    ScreenButton(to: .year(3)) {
-                        menuButton(title: "Year 3")
-                    }
-                    
-                    Spacer()
-                    
-                    ScreenButton(to: .year(4)) {
-                        menuButton(title: "Year 4")
-                    }
-                }
-                                
-                HStack {
-                    ScreenButton(to: .year(5)) {
-                        menuButton(title: "Year 5")
-                    }
-                    
-                    Spacer()
-                    
-                    ScreenButton(to: .year(6)) {
-                        menuButton(title: "Year 6")
-                    }
-                }
-                
-                Spacer()
-            }
-            .frame(maxHeight: .infinity, alignment: .center)
-            .padding(.horizontal, 20)
-            .disabled(isSidebarOpen)
-            
-            Spacer()
         }
         .sidebarOverlay(isOpen: $isSidebarOpen, selectedTab: "Main Menu")
         .navigationBarBackButtonHidden(true)
         .adBreakPoint()
     }
-
-    private func menuButton(title: String) -> some View {
-        Text(title)
-            .frame(maxWidth: .infinity, minHeight: UIScreen.main.bounds.height * 0.15)
-            .font(.system(size: UIScreen.main.bounds.width * 0.1))
-            .fontWeight(.bold)
-            .background(Color.white)
-            .foregroundColor(.black)
-            .cornerRadius(UIScreen.main.bounds.width * 0.0525)
-    }
 }
 
-struct Year1View: View {
-    @State private var isSidebarOpen : Bool = false
+/// The menu for one year: its name and ages, then a full-width card for each of its three activities, saying what the
+/// activity asks. Every year's view shows one, so the six menus look and work the same.
+struct YearMenu: View {
+    let year: Int
+    @State private var isSidebarOpen = false
     @EnvironmentObject var gameData: GameData
-    
+
+    /// Written out because the private sidebar state would make Swift's own initialiser private, and the tests
+    /// build a year menu.
+    init(year: Int) {
+        self.year = year
+    }
+
     var body: some View {
         ZStack {
             Color(hex: gameData.backgroundColourHex).opacity(gameData.backgroundOpacity)
@@ -3158,54 +3282,39 @@ struct Year1View: View {
                 .onTapGesture {
                     hideKeyboard()
                 }
-                
-            
-            VStack(){
-                NavigationBar(Back : true, Points : true, isSidebarOpen : $isSidebarOpen)
+
+            VStack(spacing: 0) {
+                NavigationBar(Back: true, Points: true, isSidebarOpen: $isSidebarOpen)
                     .frame(maxWidth: .infinity)
                     .edgesIgnoringSafeArea(.top)
                     .padding(.top, UIScreen.main.bounds.height * 0.002)
-                Spacer()
-            }
-            VStack(spacing: 50) {
-                Text("Year 1")
-                    .font(.system(size: UIScreen.main.bounds.width * 0.2))
-                    .foregroundStyle(.onBackground)
-                    .fontWeight(.bold)
-                    .underline()
-                    .accessibilityAddTraits(.isHeader)
-                ScreenButton(to: .activity(.counting)) {
-                    Text("Counting")
-                        .padding()
-                        .font(.system(size: UIScreen.main.bounds.width * 0.1))
-                        .foregroundColor(Color.black)
-                        .fontWeight(.bold)
-                        .background(Color.white)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                }
-                ScreenButton(to: .activity(.addition)) {
-                    Text("Addition")
-                        .padding()
-                        .font(.system(size: UIScreen.main.bounds.width * 0.1))
-                        .foregroundColor(Color.black)
-                        .fontWeight(.bold)
-                        .background(Color.white)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                }
-                ScreenButton(to: .activity(.subtraction)) {
-                    Text("Subtraction")
-                        .padding()
-                        .font(.system(size: UIScreen.main.bounds.width * 0.1))
-                        .foregroundColor(Color.black)
-                        .fontWeight(.bold)
-                        .background(Color.white)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                        
+
+                ScrollsIfNeeded {
+                    VStack(spacing: 24) {
+                        ScreenTitle(title: "Year \(year)",
+                                    subtitle: "\(SchoolYear.ages(year)) · choose an activity",
+                                    spokenSubtitle: "\(SchoolYear.spokenAges(year)). Choose an activity.")
+                        EqualCardGrid(columns: 1) {
+                            ForEach(Activity.activities(inYear: year), id: \.self) { activity in
+                                MenuCardButton(screen: .activity(activity), title: activity.title,
+                                               subtitle: activity.summary, icon: activity.icon,
+                                               titleSize: Metrics.contentWidth * 0.07, minHeight: 88)
+                            }
+                        }
+                    }
+                    .padding()
+                    .readableColumn()
                 }
             }
         }
         .navigationBarBackButtonHidden(true)
-        .adBreakPoint()
+    }
+}
+
+struct Year1View: View {
+    var body: some View {
+        YearMenu(year: 1)
+            .adBreakPoint()
     }
 }
 
@@ -3248,6 +3357,72 @@ struct Year1CountingQuestion: Equatable {
     }
 }
 
+/// One of the numbers in a counting question, or the gap where the missing one goes, on a grey tile. The tiles are the
+/// same size whatever is on them, so the gap lines up with the numbers.
+///
+/// The numbers are body text's size, as they always were, so they grow with the reader's text size as body text does,
+/// up to `largestFontSize(for:)`. (Not `scaledFont`: the app's other text grows more slowly than body text, and the
+/// numbers would have been smaller than before.) They use the whole tile, less a small margin, so a number too wide for
+/// it, such as 100 at the larger text sizes, is drawn a little smaller to fit rather than cut short to "…". (They used
+/// to have only the middle of the tile, and on an iPhone at the largest text sizes two digits didn't fit there even
+/// drawn at half size.)
+struct CountingTile: View {
+    let text: String
+    /// What VoiceOver reads instead of `text`, such as "missing number" for the gap. It goes on the words on the
+    /// tile, not the whole tile, so VoiceOver outlines the same part of the gap as of the numbers.
+    var spokenLabel: String? = nil
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// The size of the numbers at the usual text size, as the system's body text.
+    static let usualFontSize: CGFloat = 17
+    /// A number is never drawn smaller than half its size to fit.
+    static let minimumScaleFactor: CGFloat = 0.5
+    /// The margin at each side of a number.
+    static let sideMargin: CGFloat = 4
+    /// The margin above and below a number: SwiftUI's usual padding.
+    private static let topAndBottomMargin: CGFloat = 16
+
+    /// How wide a tile is: the same as it has always been.
+    static func width(for contentWidth: CGFloat) -> CGFloat {
+        contentWidth / 12 + 32
+    }
+
+    /// How wide a number can be before it's drawn smaller to fit.
+    static func roomForNumber(for contentWidth: CGFloat) -> CGFloat {
+        width(for: contentWidth) - 2 * sideMargin
+    }
+
+    /// The largest the numbers grow. On an iPhone they stop at the size the question's words stop at, where two digits
+    /// always fit on a tile at full size, so the numbers in a row are the same size and only 100 is sometimes drawn a
+    /// little smaller. The iPad's column has room for two digits at the largest text size, so there the numbers grow as
+    /// far as body text does, as they did before.
+    static func largestFontSize(for contentWidth: CGFloat) -> CGFloat {
+        contentWidth < Metrics.columnWidth ? ScaledFont.usualMaximum : .infinity
+    }
+
+    /// The size a number is drawn at before it's drawn smaller to fit: body text's size at the reader's text size, but
+    /// never smaller than at the usual text size, and no bigger than `largestFontSize(for:)`.
+    static func fontSize(for dynamicTypeSize: DynamicTypeSize, contentWidth: CGFloat) -> CGFloat {
+        let traits = UITraitCollection(preferredContentSizeCategory: UIContentSizeCategory(dynamicTypeSize))
+        let bodyTextSize = UIFont.preferredFont(forTextStyle: .body, compatibleWith: traits).pointSize
+        return max(usualFontSize, min(bodyTextSize, largestFontSize(for: contentWidth)))
+    }
+
+    var body: some View {
+        Text(text)
+            .accessibilityLabel(spokenLabel ?? text)
+            .font(.system(size: Self.fontSize(for: dynamicTypeSize, contentWidth: Metrics.contentWidth)))
+            .lineLimit(1)
+            .minimumScaleFactor(Self.minimumScaleFactor)
+            .padding(.horizontal, Self.sideMargin)
+            .frame(width: Self.width(for: Metrics.contentWidth))
+            .padding(.vertical, Self.topAndBottomMargin)
+            .foregroundColor(.white)
+            .background(Color.buttonGrey)
+            .cornerRadius(Metrics.contentWidth * 0.02)
+    }
+}
+
 struct Year1CountingView: View {
     @State private var current = Year1CountingQuestion.random()
     @State private var isSidebarOpen : Bool = false
@@ -3257,6 +3432,9 @@ struct Year1CountingView: View {
     @State private var showMessage = false
     @State private var sfxPlayer = SFXPlayer()
     @State private var progress = QuestionProgress()
+    /// Whether the rows of numbers and the words are closer together while the player types, because the question
+    /// doesn't fit above the keyboard as usually spaced, as on an iPhone SE. See `compactWhileTyping(_:allowed:)`.
+    @State private var isCompact = false
 
     var body: some View {
         ZStack {
@@ -3265,48 +3443,39 @@ struct Year1CountingView: View {
                 .onTapGesture {
                     hideKeyboard()
                 }
-            
-            VStack(spacing: 20) {
+
+            // Spaced closely enough for the numbers, the question, the answer box and Enter to fit above the keyboard
+            // on most iPhones, so the numbers stay in view while the player types. On an iPhone SE, and with larger
+            // text, the rows of numbers and the words come closer still while the keyboard is up (`isCompact`).
+            VStack(spacing: 12) {
                 let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 5)
-                
-                LazyVGrid(columns: columns, spacing: 20) {
+
+                LazyVGrid(columns: columns, spacing: isCompact ? 8 : 20) {
                     ForEach(0..<current.numbers.count, id: \.self) { index in
                         if index == current.missingIndex {
-                            Text("_")
-                                .accessibilityLabel(SpokenMaths.missingNumber)
-                                .frame(width: UIScreen.main.bounds.width / 12)
-                                .foregroundColor(.white)
-                                .padding()
-                                .background(Color.buttonGrey)
-                                .cornerRadius(UIScreen.main.bounds.width * 0.02)
+                            CountingTile(text: "_", spokenLabel: SpokenMaths.missingNumber)
                         } else {
-                            // Three digits shrink to fit rather than wrapping.
-                            Text("\(current.numbers[index])")
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.5)
-                                .frame(width: UIScreen.main.bounds.width / 12)
-                                .foregroundColor(.white)
-                                .padding()
-                                .background(Color.buttonGrey)
-                                .cornerRadius(UIScreen.main.bounds.width * 0.02)
+                            CountingTile(text: "\(current.numbers[index])")
                         }
                     }
                 }
-                
-                
+                .questionTop()
+
+
                 Text("What number is missing?")
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                    .scaledFont(size: Metrics.contentWidth * 0.05)
                     .fontWeight(.bold)
                     .foregroundStyle(.onBackground)
-                    .padding()
-                
+                    .padding(.horizontal)
+                    .padding(.vertical, isCompact ? 4 : nil)
+
                 TextField(answerBox: "Answer", text: $answerString)
                     .answerBoxMargin()
                     .background(Color.white)
                     .foregroundColor(.black)
-                    .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                    .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                    .cornerRadius(Metrics.contentWidth * 0.02)
+                    .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                    .font(.system(size: Metrics.contentWidth * 0.05))
                     .multilineTextAlignment(.center)
                     .answerKeyboard(.numberPad)
                     .onSubmit {
@@ -3326,11 +3495,11 @@ struct Year1CountingView: View {
                         checkAnswer()
                     } label: {
                         Text("Enter ")
-                            .buttonBox(Color.white, cornerRadius: UIScreen.main.bounds.width * 0.015, tapMargin: 6)
+                            .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.075))
+                    .font(.system(size: Metrics.contentWidth * 0.075))
                     .multilineTextAlignment(.center)
                     .fontWeight(.bold)
                     .padding()
@@ -3357,6 +3526,7 @@ struct Year1CountingView: View {
                 }
                 .questionSubmitRow()
             }
+            .compactWhileTyping($isCompact)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
         .navigationBarBackButtonHidden(true)
@@ -3416,6 +3586,9 @@ struct Year1AdditionView: View {
     @State private var showMessage = false
     @State private var sfxPlayer = SFXPlayer()
     @State private var progress = QuestionProgress()
+    /// Whether the gaps are smaller while the player types, because the question doesn't fit above the keyboard with
+    /// the usual ones, as with the largest text on an iPhone SE. See `compactWhileTyping(_:allowed:)`.
+    @State private var isCompact = false
 
     var body: some View {
         ZStack {
@@ -3425,15 +3598,16 @@ struct Year1AdditionView: View {
                     hideKeyboard()
                 }
 
-            VStack(spacing: 20) {
+            VStack(spacing: isCompact ? 8 : 20) {
                 Text("\(randomnumber1) + \(randomnumber2)")
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                    .scaledFont(size: Metrics.contentWidth * 0.05)
                     .foregroundStyle(.onBackground)
+                    .questionTop()
                     .padding()
                     .fontWeight(.bold)
                 
                 Text("What is the sum of these numbers?")
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                    .scaledFont(size: Metrics.contentWidth * 0.05)
                     .foregroundStyle(.onBackground)
                     .padding()
                     .fontWeight(.bold)
@@ -3442,9 +3616,9 @@ struct Year1AdditionView: View {
                     .answerBoxMargin()
                     .background(Color.white)
                     .foregroundColor(.black)
-                    .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                    .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                    .cornerRadius(Metrics.contentWidth * 0.02)
+                    .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                    .font(.system(size: Metrics.contentWidth * 0.05))
                     .multilineTextAlignment(.center)
                     .answerKeyboard(.numberPad)
                     .onSubmit {
@@ -3464,11 +3638,11 @@ struct Year1AdditionView: View {
                         checkAnswer()
                     } label: {
                         Text("Enter ")
-                            .buttonBox(Color.white, cornerRadius: UIScreen.main.bounds.width * 0.015, tapMargin: 6)
+                            .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.075))
+                    .font(.system(size: Metrics.contentWidth * 0.075))
                     .multilineTextAlignment(.center)
                     .fontWeight(.bold)
                     .padding()
@@ -3495,6 +3669,7 @@ struct Year1AdditionView: View {
                 }
                 .questionSubmitRow()
             }
+            .compactWhileTyping($isCompact)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
         .navigationBarBackButtonHidden(true)
@@ -3559,6 +3734,9 @@ struct Year1SubtractionView: View {
     @State private var showMessage = false
     @State private var sfxPlayer = SFXPlayer()
     @State private var progress = QuestionProgress()
+    /// Whether the gaps are smaller while the player types, because the question doesn't fit above the keyboard with
+    /// the usual ones, as with the largest text on an iPhone SE. See `compactWhileTyping(_:allowed:)`.
+    @State private var isCompact = false
 
     var body: some View {
         ZStack {
@@ -3568,17 +3746,18 @@ struct Year1SubtractionView: View {
                     hideKeyboard()
                 }
 
-            VStack(spacing: 20) {
+            VStack(spacing: isCompact ? 8 : 20) {
 
                 Text("\(randomnumber1) - \(randomnumber2)")
                     .accessibilityLabel("\(randomnumber1) minus \(randomnumber2)")
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                    .scaledFont(size: Metrics.contentWidth * 0.05)
                     .foregroundStyle(.onBackground)
+                    .questionTop()
                     .padding()
                     .fontWeight(.bold)
 
                 Text("What is the result of this subtraction?")
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                    .scaledFont(size: Metrics.contentWidth * 0.05)
                     .foregroundStyle(.onBackground)
                     .padding()
                     .fontWeight(.bold)
@@ -3587,9 +3766,9 @@ struct Year1SubtractionView: View {
                     .answerBoxMargin()
                     .background(Color.white)
                     .foregroundColor(.black)
-                    .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                    .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                    .cornerRadius(Metrics.contentWidth * 0.02)
+                    .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                    .font(.system(size: Metrics.contentWidth * 0.05))
                     .multilineTextAlignment(.center)
                     .answerKeyboard(.numberPad)
                     .onSubmit {
@@ -3609,11 +3788,11 @@ struct Year1SubtractionView: View {
                         checkAnswer()
                     } label: {
                         Text("Enter ")
-                            .buttonBox(Color.white, cornerRadius: UIScreen.main.bounds.width * 0.015, tapMargin: 6)
+                            .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.075))
+                    .font(.system(size: Metrics.contentWidth * 0.075))
                     .multilineTextAlignment(.center)
                     .fontWeight(.bold)
                     .padding()
@@ -3640,6 +3819,7 @@ struct Year1SubtractionView: View {
                 }
                 .questionSubmitRow()
             }
+            .compactWhileTyping($isCompact)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
         .onAppear {
@@ -3712,63 +3892,9 @@ struct Year1SubtractionView: View {
 }
 
 struct Year2View: View {
-    @State private var isSidebarOpen : Bool = false
-    @EnvironmentObject var gameData: GameData
-    
     var body: some View {
-        ZStack {
-            Color(hex: gameData.backgroundColourHex).opacity(gameData.backgroundOpacity)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    hideKeyboard()
-                }
-                
-            VStack(){
-                NavigationBar(Back : true, Points : true, isSidebarOpen : $isSidebarOpen)
-                    .frame(maxWidth: .infinity)
-                    .edgesIgnoringSafeArea(.top)
-                    .padding(.top, UIScreen.main.bounds.height * 0.002)
-                Spacer()
-            }
-            VStack(spacing: 50) {
-                Text("Year 2")
-                    .font(.system(size: UIScreen.main.bounds.width * 0.2))
-                    .foregroundStyle(.onBackground)
-                    .fontWeight(.bold)
-                    .underline()
-                    .accessibilityAddTraits(.isHeader)
-                ScreenButton(to: .activity(.multiplication)) {
-                    Text("Multiplication")
-                        .padding()
-                        .font(.system(size: UIScreen.main.bounds.width * 0.1))
-                        .foregroundColor(Color.black)
-                        .fontWeight(.bold)
-                        .background(Color.white)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                }
-                ScreenButton(to: .activity(.division)) {
-                    Text("Division")
-                        .padding()
-                        .font(.system(size: UIScreen.main.bounds.width * 0.1))
-                        .foregroundColor(Color.black)
-                        .fontWeight(.bold)
-                        .background(Color.white)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                }
-                ScreenButton(to: .activity(.shapes)) {
-                    Text("Shapes")
-                        .padding()
-                        .font(.system(size: UIScreen.main.bounds.width * 0.1))
-                        .foregroundColor(Color.black)
-                        .fontWeight(.bold)
-                        .background(Color.white)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                        
-                }
-            }
-        }
-        .navigationBarBackButtonHidden(true)
-        .adBreakPoint()
+        YearMenu(year: 2)
+            .adBreakPoint()
     }
 }
 
@@ -3827,6 +3953,9 @@ struct Year2MultiplicationView: View {
     @State private var showMessage = false
     @State private var sfxPlayer = SFXPlayer()
     @State private var progress = QuestionProgress()
+    /// Whether the gaps are smaller while the player types, because the question doesn't fit above the keyboard with
+    /// the usual ones, as with the largest text on an iPhone SE. See `compactWhileTyping(_:allowed:)`.
+    @State private var isCompact = false
 
     var body: some View {
         ZStack {
@@ -3836,16 +3965,17 @@ struct Year2MultiplicationView: View {
                     hideKeyboard()
                 }
             
-            VStack(spacing: 20) {
+            VStack(spacing: isCompact ? 8 : 20) {
                 Text(current.text)
                     .accessibilityLabel(current.spokenText)
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                    .scaledFont(size: Metrics.contentWidth * 0.05)
                     .foregroundStyle(.onBackground)
+                    .questionTop()
                     .padding()
                     .fontWeight(.bold)
                 
                 Text("What is the product of these numbers?")
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                    .scaledFont(size: Metrics.contentWidth * 0.05)
                     .foregroundStyle(.onBackground)
                     .padding()
                     .fontWeight(.bold)
@@ -3854,9 +3984,9 @@ struct Year2MultiplicationView: View {
                     .answerBoxMargin()
                     .background(Color.white)
                     .foregroundColor(.black)
-                    .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                    .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                    .cornerRadius(Metrics.contentWidth * 0.02)
+                    .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                    .font(.system(size: Metrics.contentWidth * 0.05))
                     .multilineTextAlignment(.center)
                     .answerKeyboard(.numberPad)
                     .onSubmit {
@@ -3876,11 +4006,11 @@ struct Year2MultiplicationView: View {
                         checkAnswer()
                     } label: {
                         Text("Enter ")
-                            .buttonBox(Color.white, cornerRadius: UIScreen.main.bounds.width * 0.015, tapMargin: 6)
+                            .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.075))
+                    .font(.system(size: Metrics.contentWidth * 0.075))
                     .multilineTextAlignment(.center)
                     .fontWeight(.bold)
                     .padding()
@@ -3907,6 +4037,7 @@ struct Year2MultiplicationView: View {
                 }
                 .questionSubmitRow()
             }
+            .compactWhileTyping($isCompact)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
         .navigationBarBackButtonHidden(true)
@@ -4005,6 +4136,9 @@ struct Year2DivisionView: View {
     @State private var sfxPlayer = SFXPlayer()
     @State private var isSidebarOpen : Bool = false
     @State private var progress = QuestionProgress()
+    /// Whether the gaps are smaller while the player types, because the question doesn't fit above the keyboard with
+    /// the usual ones, as with the largest text on an iPhone SE. See `compactWhileTyping(_:allowed:)`.
+    @State private var isCompact = false
 
     var body: some View {
         ZStack {
@@ -4014,16 +4148,17 @@ struct Year2DivisionView: View {
                     hideKeyboard()
                 }
 
-            VStack(spacing: 20) {
+            VStack(spacing: isCompact ? 8 : 20) {
 
                 Text(current.text)
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                    .scaledFont(size: Metrics.contentWidth * 0.05)
                     .foregroundStyle(.onBackground)
+                    .questionTop()
                     .padding()
                     .fontWeight(.bold)
 
                 Text("What is the result of this division?")
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                    .scaledFont(size: Metrics.contentWidth * 0.05)
                     .foregroundStyle(.onBackground)
                     .padding()
                     .fontWeight(.bold)
@@ -4032,9 +4167,9 @@ struct Year2DivisionView: View {
                     .answerBoxMargin()
                     .background(Color.white)
                     .foregroundColor(.black)
-                    .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                    .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                    .cornerRadius(Metrics.contentWidth * 0.02)
+                    .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                    .font(.system(size: Metrics.contentWidth * 0.05))
                     .multilineTextAlignment(.center)
                     .answerKeyboard(.numberPad)
                     .onSubmit {
@@ -4054,11 +4189,11 @@ struct Year2DivisionView: View {
                         checkAnswer()
                     } label: {
                         Text("Enter ")
-                            .buttonBox(Color.white, cornerRadius: UIScreen.main.bounds.width * 0.015, tapMargin: 6)
+                            .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.075))
+                    .font(.system(size: Metrics.contentWidth * 0.075))
                     .multilineTextAlignment(.center)
                     .fontWeight(.bold)
                     .padding()
@@ -4085,6 +4220,7 @@ struct Year2DivisionView: View {
                 }
                 .questionSubmitRow()
             }
+            .compactWhileTyping($isCompact)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
         .navigationBarBackButtonHidden(true)
@@ -4307,6 +4443,9 @@ struct Year2ShapesView: View {
     @State private var showMessage = false
     @State private var sfxPlayer = SFXPlayer()
     @State private var progress = QuestionProgress()
+    /// Whether the gaps are smaller while the player types, because the question doesn't fit above the keyboard with
+    /// the usual ones, as with a circle and the largest text on an iPhone SE. See `compactWhileTyping(_:allowed:)`.
+    @State private var isCompact = false
 
     var body: some View {
         ZStack {
@@ -4316,19 +4455,19 @@ struct Year2ShapesView: View {
                     hideKeyboard()
                 }
 
-            VStack {
-                Year2ShapePicture(question: current, size: UIScreen.main.bounds.width * 0.2)
+            VStack(spacing: isCompact ? 4 : nil) {
+                Year2ShapePicture(question: current, size: Metrics.contentWidth * 0.2)
                 Text(current.text)
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                    .scaledFont(size: Metrics.contentWidth * 0.05)
                     .foregroundStyle(.onBackground)
                 
                 TextField(answerBox: "Answer", text: $answerString)
                     .answerBoxMargin()
                     .background(Color.white)
                     .foregroundColor(.black)
-                    .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                    .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                    .cornerRadius(Metrics.contentWidth * 0.02)
+                    .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                    .font(.system(size: Metrics.contentWidth * 0.05))
                     .multilineTextAlignment(.center)
                     .onSubmit {
                         checkAnswer()
@@ -4349,11 +4488,11 @@ struct Year2ShapesView: View {
                         checkAnswer()
                     } label: {
                         Text("Enter ")
-                            .buttonBox(Color.white, cornerRadius: UIScreen.main.bounds.width * 0.015, tapMargin: 6)
+                            .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.075))
+                    .font(.system(size: Metrics.contentWidth * 0.075))
                     .multilineTextAlignment(.center)
                     .fontWeight(.bold)
                     .padding()
@@ -4380,6 +4519,7 @@ struct Year2ShapesView: View {
                 }
                 .questionSubmitRow()
             }
+            .compactWhileTyping($isCompact)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
         .navigationBarBackButtonHidden(true)
@@ -4455,63 +4595,9 @@ struct ShapeMaker: Shape {
 }
 
 struct Year3View: View {
-    @State private var isSidebarOpen : Bool = false
-    @EnvironmentObject var gameData: GameData
-    
     var body: some View {
-        ZStack {
-            Color(hex: gameData.backgroundColourHex).opacity(gameData.backgroundOpacity)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    hideKeyboard()
-                }
-                
-            VStack(){
-                NavigationBar(Back : true, Points : true, isSidebarOpen : $isSidebarOpen)
-                    .frame(maxWidth: .infinity)
-                    .edgesIgnoringSafeArea(.top)
-                    .padding(.top, UIScreen.main.bounds.height * 0.002)
-                Spacer()
-            }
-            VStack(spacing: 50) {
-                Text("Year 3")
-                    .font(.system(size: UIScreen.main.bounds.width * 0.2))
-                    .foregroundStyle(.onBackground)
-                    .fontWeight(.bold)
-                    .underline()
-                    .accessibilityAddTraits(.isHeader)
-                ScreenButton(to: .activity(.fractions)) {
-                    Text("Fractions")
-                        .padding()
-                        .font(.system(size: UIScreen.main.bounds.width * 0.1))
-                        .foregroundColor(Color.black)
-                        .fontWeight(.bold)
-                        .background(Color.white)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                }
-                ScreenButton(to: .activity(.measurement)) {
-                    Text("Measurement")
-                        .padding()
-                        .font(.system(size: UIScreen.main.bounds.width * 0.1))
-                        .foregroundColor(Color.black)
-                        .fontWeight(.bold)
-                        .background(Color.white)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                }
-                ScreenButton(to: .activity(.time)) {
-                    Text("Time")
-                        .padding()
-                        .font(.system(size: UIScreen.main.bounds.width * 0.1))
-                        .foregroundColor(Color.black)
-                        .fontWeight(.bold)
-                        .background(Color.white)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                        
-                }
-            }
-        }
-        .navigationBarBackButtonHidden(true)
-        .adBreakPoint()
+        YearMenu(year: 3)
+            .adBreakPoint()
     }
 }
 
@@ -4548,20 +4634,18 @@ struct Year3FractionsView: View {
             VStack {
                 Text(loadQuestion())
                     .accessibilityLabel(spokenQuestion())
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                    .scaledFont(size: Metrics.contentWidth * 0.05)
                     .fontWeight(.bold)
                     .foregroundStyle(.onBackground)
                     .padding()
 
-                WorkingOutView(canvasView: $canvasView)
-                
                 if question == 2 {
                     TextField(answerBox: "Enter your answer", text: $answerString)
                         .scaledFont(size: 17)
                         .answerBoxMargin()
                         .background(Color.white)
                         .foregroundColor(.black)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
+                        .cornerRadius(Metrics.contentWidth * 0.02)
                         .frame(width: 300)
                         .answerKeyboard(.numberPad)
                         .onSubmit {
@@ -4588,11 +4672,11 @@ struct Year3FractionsView: View {
                         checkAnswer()
                     } label: {
                         Text("Enter ")
-                            .buttonBox(Color.white, cornerRadius: UIScreen.main.bounds.width * 0.015, tapMargin: 6)
+                            .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.075))
+                    .font(.system(size: Metrics.contentWidth * 0.075))
                     .multilineTextAlignment(.center)
                     .fontWeight(.bold)
                     .padding()
@@ -4618,6 +4702,8 @@ struct Year3FractionsView: View {
                     }
                 }
                 .questionSubmitRow()
+
+                WorkingOutView(canvasView: $canvasView)
             }
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
@@ -4833,10 +4919,14 @@ struct Year3MeasurementView: View {
     @State private var showMessage = false
     @State private var isSidebarOpen : Bool = false
     @State private var sfxPlayer = SFXPlayer()
-    @State private var scale: CGFloat = UIScreen.main.bounds.width / 20
+    @State private var scale: CGFloat = Metrics.contentWidth / 20
     @State private var offsetX: CGFloat = 0
     @State private var userUnit: String = ""
     @State private var progress = QuestionProgress()
+    /// Whether the margin above and below Enter is smaller while the player types, because the question doesn't fit
+    /// above the keyboard with the usual one, as with the ruler and the largest text on an iPhone 17 Pro. See
+    /// `compactWhileTyping(_:allowed:)`.
+    @State private var isCompact = false
     @State private var canvasView = PKCanvasView()
 
     var body: some View {
@@ -4850,22 +4940,27 @@ struct Year3MeasurementView: View {
             VStack(spacing: 10) {
                 if current.kind == .convert {
                     Text(current.text)
-                        .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                        .scaledFont(size: Metrics.contentWidth * 0.05)
                         .foregroundStyle(.onBackground)
                         .multilineTextAlignment(.center)
                         .padding(.bottom, 20)
                 } else {
-                    VStack(spacing: 20) {
-                        Text("Measure the object below:")
-                            .scaledFont(size: UIScreen.main.bounds.width * 0.05)
-                            .foregroundStyle(.onBackground)
-                            .multilineTextAlignment(.center)
-                        
-                        Text("Move the rectangle to the base of the ruler.")
-                            .scaledFont(size: UIScreen.main.bounds.width * 0.05)
-                            .foregroundStyle(.onBackground)
-                            .multilineTextAlignment(.center)
-                        
+                    // Spaced closely enough for the instructions, the bar, the ruler, the answer box and Enter to fit
+                    // above the keyboard on a small iPhone, so the instructions stay in view while the player types.
+                    VStack(spacing: 12) {
+                        // The two lines are one instruction, so they sit together.
+                        VStack(spacing: 4) {
+                            Text("Measure the object below:")
+                                .scaledFont(size: Metrics.contentWidth * 0.05)
+                                .foregroundStyle(.onBackground)
+                                .multilineTextAlignment(.center)
+
+                            Text("Move the rectangle to the base of the ruler.")
+                                .scaledFont(size: Metrics.contentWidth * 0.05)
+                                .foregroundStyle(.onBackground)
+                                .multilineTextAlignment(.center)
+                        }
+
                         DraggableRectangleView(
                             objectLength: current.objectLength,
                             scale: scale,
@@ -4875,28 +4970,25 @@ struct Year3MeasurementView: View {
                         ZStack {
                             Rectangle()
                                 .fill(Color.white)
-                                .frame(width: UIScreen.main.bounds.width * 0.9, height: UIScreen.main.bounds.width * 0.175)
+                                .frame(width: Metrics.contentWidth * 0.9, height: Metrics.contentWidth * 0.175)
                                 .cornerRadius(5)
                                 
                             RulerView()
-                                .frame(width: UIScreen.main.bounds.width * 0.9, height: UIScreen.main.bounds.width * 0.1)
+                                .frame(width: Metrics.contentWidth * 0.9, height: Metrics.contentWidth * 0.1)
                         }
                     }
                 }
 
-                if current.kind == .convert {
-                    WorkingOutView(canvasView: $canvasView)
-                }
-                
-                VStack(spacing: 20) {
+                // 12 points apart, like the ruler above, so the question fits above the keyboard on a small iPhone.
+                VStack(spacing: 12) {
                     HStack {
                         TextField(answerBox: "Answer", text: $answerString)
                             .answerBoxMargin()
                             .background(Color.white)
                             .foregroundColor(.black)
-                            .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                            .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                            .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                            .cornerRadius(Metrics.contentWidth * 0.02)
+                            .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                            .font(.system(size: Metrics.contentWidth * 0.05))
                             .multilineTextAlignment(.center)
                             .answerKeyboard(.numberPad)
                             .onSubmit {
@@ -4908,23 +5000,23 @@ struct Year3MeasurementView: View {
                             Picker("Pick a unit", selection: $userUnit) {
                                 // Placeholder tagged "" so the wheel never shows a unit that isn't actually selected
                                 Text("Unit")
-                                    .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                                    .font(.system(size: Metrics.contentWidth * 0.05))
                                     .padding(.vertical, UIScreen.main.bounds.height * 0.02)
                                     .tag("")
                                 ForEach(current.units, id: \.self) { option in
                                     Text(option)
-                                        .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                                        .font(.system(size: Metrics.contentWidth * 0.05))
                                         .padding(.vertical, UIScreen.main.bounds.height * 0.02)
                                         .tag(option)
                                 }
                             }
                             .pickerStyle(.wheel)
                             .colorSchemeForBackground()
-                            .frame(width: UIScreen.main.bounds.width * 0.2,
-                                   height: UIScreen.main.bounds.width * 0.3)
+                            .frame(width: Metrics.contentWidth * 0.2,
+                                   height: Metrics.contentWidth * 0.3)
                         } else {
                             Text("cm")
-                                .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                                .font(.system(size: Metrics.contentWidth * 0.05))
                                 .foregroundStyle(.onBackground)
                         }
                     }
@@ -4941,14 +5033,15 @@ struct Year3MeasurementView: View {
                             checkAnswer()
                         } label: {
                             Text("Enter ")
-                                .buttonBox(Color.white, cornerRadius: UIScreen.main.bounds.width * 0.015, tapMargin: 6)
+                                .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
                         }
                         .disabled(showMessage)
                         .foregroundColor(.black)
-                        .font(.system(size: UIScreen.main.bounds.width * 0.075))
+                        .font(.system(size: Metrics.contentWidth * 0.075))
                         .multilineTextAlignment(.center)
                         .fontWeight(.bold)
-                        .padding()
+                        .padding(.horizontal)
+                        .padding(.vertical, isCompact ? 8 : nil)
                         
                         if progress.showSkipButton {
                             Button {
@@ -4972,8 +5065,13 @@ struct Year3MeasurementView: View {
                     }
                     .questionSubmitRow()
                 }
+
+                if current.kind == .convert {
+                    WorkingOutView(canvasView: $canvasView)
+                }
             }
             .padding(.horizontal, 16)
+            .compactWhileTyping($isCompact)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
         .navigationBarBackButtonHidden(true)
@@ -5037,7 +5135,7 @@ struct Year3MeasurementView: View {
 }
 
 struct RulerView: View {
-    let scale: CGFloat = UIScreen.main.bounds.width / 20
+    let scale: CGFloat = Metrics.contentWidth / 20
 
     var body: some View {
         GeometryReader { geometry in
@@ -5046,7 +5144,7 @@ struct RulerView: View {
                     ForEach(0...15, id: \.self) { index in
                         VStack {
                             Rectangle()
-                                .frame(width: UIScreen.main.bounds.width * 0.005,
+                                .frame(width: Metrics.contentWidth * 0.005,
                                        height: UIScreen.main.bounds.height * 0.025)
                                 .foregroundColor(.black)
                                 .cornerRadius(5)
@@ -5060,14 +5158,14 @@ struct RulerView: View {
                         .frame(width: scale)
                     }
                 }
-                .frame(width: UIScreen.main.bounds.width * 0.9)
+                .frame(width: Metrics.contentWidth * 0.9)
 
                 Text("cm")
                     .font(.system(size:UIScreen.main.bounds.height * 0.02))
                     .foregroundColor(.black)
                     .padding(.trailing, 5)
                     .padding(.bottom, 5)
-                    .offset(x: -UIScreen.main.bounds.width / 111, y: UIScreen.main.bounds.height * 0.02)
+                    .offset(x: -Metrics.contentWidth / 111, y: UIScreen.main.bounds.height * 0.02)
             }
         }
         .accessibilityElement(children: .ignore)
@@ -5356,6 +5454,12 @@ struct Year3TimeView: View {
     /// starts with the clock at 12:00.
     @State private var clockHour = 0
     @State private var clockMinute = 0
+    /// Whether the question is laid out more tightly while the player types, so it fits above the keyboard: the clock
+    /// to read goes beside its instructions, and the questions without a clock have smaller gaps round their words.
+    /// See `compactWhileTyping(_:allowed:)`.
+    @State private var isCompact = false
+    @State private var compactClockSize: CGFloat = 150
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         ZStack {
@@ -5370,21 +5474,20 @@ struct Year3TimeView: View {
                 switch current.kind {
                 case .toMinutes:
                     Text(current.text)
-                        .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                        .scaledFont(size: Metrics.contentWidth * 0.05)
                         .fontWeight(.bold)
                         .foregroundStyle(.onBackground)
-                        .padding()
-                    
-                    WorkingOutView(canvasView: $canvasView)
+                        .padding(.horizontal)
+                        .padding(.vertical, isCompact ? 4 : nil)
                     
                     HStack {
                         TextField(answerBox: "Minutes", text: $minutesanswer)
                             .answerBoxMargin()
                             .background(Color.white)
                             .foregroundColor(.black)
-                            .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                            .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                            .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                            .cornerRadius(Metrics.contentWidth * 0.02)
+                            .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                            .font(.system(size: Metrics.contentWidth * 0.05))
                             .multilineTextAlignment(.center)
                             .answerKeyboard(.numberPad)
                             .onSubmit {
@@ -5393,19 +5496,18 @@ struct Year3TimeView: View {
                             }
                         
                         Text("Minutes")
-                            .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                            .font(.system(size: Metrics.contentWidth * 0.05))
                             .fontWeight(.bold)
                             .foregroundStyle(.onBackground)
                             .padding()
                     }
                 case .toHoursAndMinutes:
                     Text(current.text)
-                        .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                        .scaledFont(size: Metrics.contentWidth * 0.05)
                         .fontWeight(.bold)
                         .foregroundStyle(.onBackground)
-                        .padding()
-                    
-                    WorkingOutView(canvasView: $canvasView)
+                        .padding(.horizontal)
+                        .padding(.vertical, isCompact ? 4 : nil)
                     
                     HStack {
                         VStack{
@@ -5413,9 +5515,9 @@ struct Year3TimeView: View {
                                 .answerBoxMargin()
                                 .background(Color.white)
                                 .foregroundColor(.black)
-                                .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                                .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                                .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                                .cornerRadius(Metrics.contentWidth * 0.02)
+                                .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                                .font(.system(size: Metrics.contentWidth * 0.05))
                                 .multilineTextAlignment(.center)
                                 .answerKeyboard(.numberPad)
                                 .onSubmit {
@@ -5424,14 +5526,14 @@ struct Year3TimeView: View {
                                 }
                             
                             Text("Hours")
-                                .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                                .font(.system(size: Metrics.contentWidth * 0.05))
                                 .fontWeight(.bold)
                                 .foregroundStyle(.onBackground)
                                 .padding()
                         }
                         
                         Text("and")
-                            .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                            .font(.system(size: Metrics.contentWidth * 0.05))
                             .fontWeight(.bold)
                             .foregroundStyle(.onBackground)
                             .padding()
@@ -5441,9 +5543,9 @@ struct Year3TimeView: View {
                                 .answerBoxMargin()
                                 .background(Color.white)
                                 .foregroundColor(.black)
-                                .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                                .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                                .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                                .cornerRadius(Metrics.contentWidth * 0.02)
+                                .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                                .font(.system(size: Metrics.contentWidth * 0.05))
                                 .multilineTextAlignment(.center)
                                 .answerKeyboard(.numberPad)
                                 .onSubmit {
@@ -5452,7 +5554,7 @@ struct Year3TimeView: View {
                                 }
                             
                             Text("Minutes")
-                                .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                                .font(.system(size: Metrics.contentWidth * 0.05))
                                 .fontWeight(.bold)
                                 .foregroundStyle(.onBackground)
                                 .padding()
@@ -5460,29 +5562,29 @@ struct Year3TimeView: View {
                     }
                 case .timeAfter:
                     Text(current.text)
-                        .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                        .scaledFont(size: Metrics.contentWidth * 0.05)
                         .fontWeight(.bold)
                         .foregroundStyle(.onBackground)
                         .multilineTextAlignment(.center)
-                        .padding()
+                        .padding(.horizontal)
+                        .padding(.vertical, isCompact ? 4 : nil)
                     
                     Text(current.instructions ?? "")
-                        .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                        .scaledFont(size: Metrics.contentWidth * 0.05)
                         .fontWeight(.bold)
                         .foregroundStyle(.onBackground)
                         .multilineTextAlignment(.center)
-                        .padding()
+                        .padding(.horizontal)
+                        .padding(.vertical, isCompact ? 4 : nil)
 
-                    WorkingOutView(canvasView: $canvasView)
-                    
                     HStack {
                         TextField(answerBox: "Hours", text: $hoursanswer)
                             .answerBoxMargin()
                             .background(Color.white)
                             .foregroundColor(.black)
-                            .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                            .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                            .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                            .cornerRadius(Metrics.contentWidth * 0.02)
+                            .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                            .font(.system(size: Metrics.contentWidth * 0.05))
                             .multilineTextAlignment(.center)
                             .answerKeyboard(.numberPad)
                             .onSubmit {
@@ -5491,7 +5593,7 @@ struct Year3TimeView: View {
                             }
                         
                         Text(":")
-                            .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                            .font(.system(size: Metrics.contentWidth * 0.05))
                             .fontWeight(.bold)
                             .foregroundStyle(.onBackground)
                             .padding()
@@ -5501,9 +5603,9 @@ struct Year3TimeView: View {
                             .answerBoxMargin()
                             .background(Color.white)
                             .foregroundColor(.black)
-                            .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                            .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                            .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                            .cornerRadius(Metrics.contentWidth * 0.02)
+                            .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                            .font(.system(size: Metrics.contentWidth * 0.05))
                             .multilineTextAlignment(.center)
                             .answerKeyboard(.numberPad)
                             .onSubmit {
@@ -5512,34 +5614,68 @@ struct Year3TimeView: View {
                             }
                     }
                 case let .readClock(hour, minute):
+                    // The clock to read is the tallest question. On the iPhone SE it only just fits with the usual
+                    // spacing, so "Incorrect. Try Again!" pushed the words off the top for a second. Tighter spacing
+                    // round the words, the instructions and the message keeps them all in view, with the clock at its
+                    // usual size.
                     Text(current.text)
-                        .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                        .scaledFont(size: Metrics.contentWidth * 0.05)
                         .fontWeight(.bold)
                         .foregroundStyle(.onBackground)
-                        .padding()
+                        .questionTop()
+                        .padding(.horizontal)
+                        .padding(.vertical, 4)
 
-                    Text(current.instructions ?? "")
-                        .scaledFont(size: UIScreen.main.bounds.width * 0.05)
-                        .fontWeight(.bold)
-                        .foregroundStyle(.onBackground)
-                        .multilineTextAlignment(.center)
-                        .padding()
+                    if isCompact {
+                        // While the player types, the clock goes beside the instructions and AM or PM, and is drawn
+                        // as big as the room above the keyboard allows, so the question, the clock and the answer
+                        // boxes are all in view at once. The answer boxes below stay where they are, so they keep
+                        // the keyboard.
+                        HStack(spacing: 12) {
+                            clockToRead(hour: hour, minute: minute, size: compactClockSize)
 
-                    // AM or PM goes beside the clock, or under it when the reader's text is too big for both to fit
-                    // across the screen. Beside it, the clock keeps the room it has at its usual size, so a clock
-                    // drawn smaller to fit the screen's height doesn't change which way round they go.
-                    ViewThatFits(in: .horizontal) {
-                        HStack {
-                            clockToRead(hour: hour, minute: minute)
-                                .frame(minWidth: Self.usualClockSize)
+                            VStack(spacing: 8) {
+                                Text(current.instructions ?? "")
+                                    .scaledFont(size: Metrics.contentWidth * 0.05)
+                                    .fontWeight(.bold)
+                                    .foregroundStyle(.onBackground)
+                                    .multilineTextAlignment(.center)
 
-                            meridiem(of: hour)
+                                meridiem(of: hour)
+                            }
+                            .frame(width: Metrics.contentWidth * 0.4)
+                            // The row passes on the height the question offers it, which can be less than the clock
+                            // beside it is tall, and the instructions were cut short to "Answer in 12-h…" on the bigger
+                            // iPhones. The column is always as tall as its words need instead; if the question is then
+                            // taller than the room above the keyboard, it scrolls.
+                            .fixedSize(horizontal: false, vertical: true)
                         }
+                    } else {
+                        Text(current.instructions ?? "")
+                            .scaledFont(size: Metrics.contentWidth * 0.05)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.onBackground)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                            .padding(.vertical, 4)
 
-                        VStack(spacing: 0) {
-                            clockToRead(hour: hour, minute: minute)
+                        // AM or PM goes beside the clock, or under it when the reader's text is too big for both to
+                        // fit across the screen. Beside it, the clock keeps the room it has at its usual size, so a
+                        // clock drawn smaller to fit the screen (see `clockToReadLimit`) doesn't change which way
+                        // round they go.
+                        ViewThatFits(in: .horizontal) {
+                            HStack {
+                                clockToRead(hour: hour, minute: minute, size: clockSize)
+                                    .frame(minWidth: Self.usualClockSize)
 
-                            meridiem(of: hour)
+                                meridiem(of: hour)
+                            }
+
+                            VStack(spacing: 0) {
+                                clockToRead(hour: hour, minute: minute, size: clockSize)
+
+                                meridiem(of: hour)
+                            }
                         }
                     }
 
@@ -5548,9 +5684,9 @@ struct Year3TimeView: View {
                             .answerBoxMargin()
                             .background(Color.white)
                             .foregroundColor(.black)
-                            .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                            .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                            .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                            .cornerRadius(Metrics.contentWidth * 0.02)
+                            .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                            .font(.system(size: Metrics.contentWidth * 0.05))
                             .multilineTextAlignment(.center)
                             .answerKeyboard(.numberPad)
                             .onSubmit {
@@ -5559,7 +5695,7 @@ struct Year3TimeView: View {
                             }
 
                         Text(":")
-                            .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                            .font(.system(size: Metrics.contentWidth * 0.05))
                             .fontWeight(.bold)
                             .foregroundStyle(.onBackground)
                             .padding()
@@ -5569,9 +5705,9 @@ struct Year3TimeView: View {
                             .answerBoxMargin()
                             .background(Color.white)
                             .foregroundColor(.black)
-                            .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                            .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                            .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                            .cornerRadius(Metrics.contentWidth * 0.02)
+                            .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                            .font(.system(size: Metrics.contentWidth * 0.05))
                             .multilineTextAlignment(.center)
                             .answerKeyboard(.numberPad)
                             .onSubmit {
@@ -5581,7 +5717,7 @@ struct Year3TimeView: View {
                     }
                 case .setClock:
                     Text(current.text)
-                        .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                        .scaledFont(size: Metrics.contentWidth * 0.05)
                         .fontWeight(.bold)
                         .foregroundStyle(.onBackground)
                         .padding()
@@ -5594,8 +5730,10 @@ struct Year3TimeView: View {
                 }
 
                 if showMessage {
+                    // Tighter above and below than in the other activities, to leave the clock room (see `.readClock`).
                     AnswerFeedbackText(message: responseMessage)
-                        .padding()
+                        .padding(.horizontal)
+                        .padding(.vertical, 4)
                         .transition(.answerFeedback)
                 }
 
@@ -5605,11 +5743,11 @@ struct Year3TimeView: View {
                         checkAnswer()
                     } label: {
                         Text("Enter ")
-                            .buttonBox(Color.white, cornerRadius: UIScreen.main.bounds.width * 0.015, tapMargin: 6)
+                            .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.075))
+                    .font(.system(size: Metrics.contentWidth * 0.075))
                     .multilineTextAlignment(.center)
                     .fontWeight(.bold)
                     .padding()
@@ -5635,11 +5773,27 @@ struct Year3TimeView: View {
                     }
                 }
                 .questionSubmitRow()
+
+                // The questions without a clock have a working-out pad.
+                if !showsAClock {
+                    WorkingOutView(canvasView: $canvasView)
+                }
             }
             // On the smallest iPhones, and with large text, a clock is too tall to fit above the answer boxes and
-            // Enter, so it's drawn a little smaller there.
-            .fitOnScreen(by: $clockSize, usual: Self.usualClockSize, minimum: 200,
-                         paused: showMessage || !showsAClock)
+            // Enter, so it's drawn a little smaller there. On a narrow iPhone a clock to read is also a little
+            // smaller, so that it and AM or PM beside it keep a margin at each side of the screen.
+            .fitOnScreen(by: $clockSize, usual: isReadingAClock ? clockToReadLimit : Self.usualClockSize,
+                         minimum: 200, paused: showMessage || !showsAClock || isCompact)
+            // While the player types the time on a clock, there's room for the question, the clock and the answer
+            // boxes above the keyboard only with the clock beside the instructions and drawn smaller (see
+            // `isCompact`). It's never drawn smaller than 150 points, where its numbers are still 15 points tall.
+            .fitOnScreen(by: $compactClockSize, usual: compactClockLimit, minimum: 150,
+                         paused: showMessage || !isCompact || !isReadingAClock, aboveKeyboard: true)
+            // At the accessibility text sizes the instructions are too big for the narrow column beside the clock,
+            // so the clock keeps its usual place and the question scrolls instead. The questions without a clock
+            // just have smaller gaps round their words.
+            .compactWhileTyping($isCompact,
+                                allowed: isReadingAClock ? !dynamicTypeSize.isAccessibilitySize : !showsAClock)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
         .navigationBarBackButtonHidden(true)
@@ -5648,6 +5802,19 @@ struct Year3TimeView: View {
 
     private static let usualClockSize: CGFloat = 300
 
+    /// As big as a clock to read can be with AM or PM beside it and about 15 points at each side of the screen. AM or
+    /// PM takes about 62 points at the usual text size, with 8 between it and the clock. That's 300 on most iPhones
+    /// and 275 on an iPhone SE.
+    private var clockToReadLimit: CGFloat {
+        min(Self.usualClockSize, Metrics.contentWidth - 100)
+    }
+
+    /// As big as the clock can be beside the instructions while the player types: the instructions take 40% of the
+    /// width, with 12 points between them and 16 at each side of the screen.
+    private var compactClockLimit: CGFloat {
+        min(Self.usualClockSize, Metrics.contentWidth * 0.6 - 44)
+    }
+
     private var showsAClock: Bool {
         switch current.kind {
         case .readClock, .setClock: return true
@@ -5655,18 +5822,23 @@ struct Year3TimeView: View {
         }
     }
 
-    private func clockToRead(hour: Int, minute: Int) -> some View {
+    private var isReadingAClock: Bool {
+        if case .readClock = current.kind { return true }
+        return false
+    }
+
+    private func clockToRead(hour: Int, minute: Int, size: CGFloat) -> some View {
         StationaryClockView(
             minute: .constant(Double(minute)),
             hour: .constant(Double(hour)),
             rotationCount: .constant(0)
         )
-        .frame(width: clockSize, height: clockSize)
+        .frame(width: size, height: size)
     }
 
     private func meridiem(of hour: Int) -> some View {
         Text(ClockMaths.isPM(hour) ? "PM" : "AM")
-            .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+            .scaledFont(size: Metrics.contentWidth * 0.05)
             .fontWeight(.bold)
             .foregroundStyle(.onBackground)
             .padding()
@@ -6011,62 +6183,9 @@ struct InteractiveClockView: View {
 }
 
 struct Year4View: View {
-    @State private var isSidebarOpen : Bool = false
-    @EnvironmentObject var gameData: GameData
-
     var body: some View {
-        ZStack {
-            Color(hex: gameData.backgroundColourHex).opacity(gameData.backgroundOpacity)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    hideKeyboard()
-                }
-            VStack(){
-                NavigationBar(Back : true, Points : true, isSidebarOpen : $isSidebarOpen)
-                    .frame(maxWidth: .infinity)
-                    .edgesIgnoringSafeArea(.top)
-                    .padding(.top, UIScreen.main.bounds.height * 0.002)
-                Spacer()
-            }
-            VStack(spacing: 50) {
-                Text("Year 4")
-                    .font(.system(size: UIScreen.main.bounds.width * 0.2))
-                    .foregroundStyle(.onBackground)
-                    .fontWeight(.bold)
-                    .underline()
-                    .accessibilityAddTraits(.isHeader)
-                ScreenButton(to: .activity(.decimals)) {
-                    Text("Decimals")
-                        .padding()
-                        .font(.system(size: UIScreen.main.bounds.width * 0.1))
-                        .foregroundColor(Color.black)
-                        .fontWeight(.bold)
-                        .background(Color.white)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                }
-                ScreenButton(to: .activity(.geometry)) {
-                    Text("Geometry")
-                        .padding()
-                        .font(.system(size: UIScreen.main.bounds.width * 0.1))
-                        .foregroundColor(Color.black)
-                        .fontWeight(.bold)
-                        .background(Color.white)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                }
-                ScreenButton(to: .activity(.money)) {
-                    Text("Money")
-                        .padding()
-                        .font(.system(size: UIScreen.main.bounds.width * 0.1))
-                        .foregroundColor(Color.black)
-                        .fontWeight(.bold)
-                        .background(Color.white)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                        
-                }
-            }
-        }
-        .navigationBarBackButtonHidden(true)
-        .adBreakPoint()
+        YearMenu(year: 4)
+            .adBreakPoint()
     }
 }
 
@@ -6188,32 +6307,30 @@ struct Year4DecimalsView: View {
             VStack (spacing: 20){
                 Text(current.text)
                     .accessibilityLabel(current.spokenText)
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                    .scaledFont(size: Metrics.contentWidth * 0.05)
                     .fontWeight(.bold)
                     .foregroundStyle(.onBackground)
                     .padding()
-
-                WorkingOutView(canvasView: $canvasView)
-                
-                if showMessage {
-                    AnswerFeedbackText(message: responseMessage)
-                        .padding()
-                        .transition(.answerFeedback)
-                }
 
                 TextField(answerBox: "Answer", text: $answerString)
                     .answerBoxMargin()
                     .background(Color.white)
                     .foregroundColor(.black)
-                    .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                    .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                    .cornerRadius(Metrics.contentWidth * 0.02)
+                    .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                    .font(.system(size: Metrics.contentWidth * 0.05))
                     .multilineTextAlignment(.center)
                     .answerKeyboard(.decimalPad)
                     .onSubmit {
                         checkAnswer()
                         hideKeyboard()
                     }
+
+                if showMessage {
+                    AnswerFeedbackText(message: responseMessage)
+                        .padding()
+                        .transition(.answerFeedback)
+                }
                 
                 HStack{
                     Button {
@@ -6221,11 +6338,11 @@ struct Year4DecimalsView: View {
                         checkAnswer()
                     } label: {
                         Text("Enter ")
-                            .buttonBox(Color.white, cornerRadius: UIScreen.main.bounds.width * 0.015, tapMargin: 6)
+                            .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.075))
+                    .font(.system(size: Metrics.contentWidth * 0.075))
                     .multilineTextAlignment(.center)
                     .fontWeight(.bold)
                     .padding()
@@ -6251,6 +6368,8 @@ struct Year4DecimalsView: View {
                     }
                 }
                 .questionSubmitRow()
+
+                WorkingOutView(canvasView: $canvasView)
             }
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
@@ -6479,6 +6598,9 @@ struct Year4GeometryView: View {
     @State var possibleUnits: [String] = Year4GeometryQuestion.units
     @State var userUnit: String = ""
     @State private var progress = QuestionProgress()
+    /// Whether the shape is beside the answer box and the gaps are smaller, because the question doesn't fit above the
+    /// keyboard with the shape above it. See `compactWhileTyping(_:allowed:)`.
+    @State private var isCompact = false
 
     var body: some View {
         ZStack {
@@ -6495,93 +6617,97 @@ struct Year4GeometryView: View {
                     resetQuestion()
                 }
 
-            VStack(spacing: 15) {
+            // Spaced closely enough for the question, its picture, the answer box (with the unit wheel) and Enter to fit
+            // above the keyboard on most iPhones, so the question stays in view while the player types. Where they
+            // don't, the shape goes beside the answer box while the player types, and the gaps and the margin round
+            // Enter are smaller, which the largest text needs on an iPhone SE (`isCompact`).
+            VStack(spacing: isCompact ? 4 : 12) {
                 Text(questionText())
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                    .scaledFont(size: Metrics.contentWidth * 0.05)
                     .foregroundStyle(.onBackground)
                     .fontWeight(.bold)
                     .multilineTextAlignment(.center)
+                    .questionTop()
                     .padding(.top, 20)
 
-                if current.question == 3 {
-                    AngleDrawingView(angle: current.angleMeasure)
-                        .stroke(.linesOnBackground, lineWidth: 2)
-                        .frame(width: UIScreen.main.bounds.width * 0.4, height: UIScreen.main.bounds.width * 0.4)
-                        .accessibilityElement()
-                        .accessibilityLabel(current.figureDescription)
-                        .accessibilityAddTraits(.isImage)
-                } else {
-                    HStack {
-                        Spacer()
+                figureLayout {
+                    if current.question == 3 {
+                        // Half as tall as it is wide: the arms always point up, so there's nothing to draw below them.
+                        AngleDrawingView(angle: current.angleMeasure)
+                            .stroke(.linesOnBackground, lineWidth: 2)
+                            .frame(width: Metrics.contentWidth * 0.4, height: Metrics.contentWidth * 0.2 + 4)
+                            .accessibilityElement()
+                            .accessibilityLabel(current.figureDescription)
+                            .accessibilityAddTraits(.isImage)
+                    } else {
                         ShapeView(sides: current.shapeType, labels: current.sides, unitType: current.unitType)
-                            .frame(width: UIScreen.main.bounds.width * 0.4, height: UIScreen.main.bounds.width * 0.4)
+                            .frame(width: Metrics.contentWidth * 0.4, height: Metrics.contentWidth * 0.4)
                             .accessibilityElement(children: .ignore)
                             .accessibilityLabel(current.figureDescription)
                             .accessibilityAddTraits(.isImage)
-                        Spacer()
+                            .frame(maxWidth: isShapeBesideAnswer ? nil : .infinity)
+                    }
+
+                    if current.question == 3 {
+                        Text("Is this angle: Acute, Right or Obtuse?")
+                            .scaledFont(size: Metrics.contentWidth * 0.05)
+                            .foregroundStyle(.onBackground)
+                            .fontWeight(.bold)
+                    }
+
+                    answerLayout {
+                        TextField(answerBox: "Answer", text: $answerString)
+                            .answerBoxMargin()
+                            .background(Color.white)
+                            .foregroundColor(.black)
+                            .cornerRadius(Metrics.contentWidth * 0.02)
+                            .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                            .font(.system(size: Metrics.contentWidth * 0.05))
+                            .multilineTextAlignment(.center)
+                            .answerKeyboard(current.question == 3 ? .default : .numberPad)
+                            .onSubmit {
+                                checkAnswer()
+                                hideKeyboard()
+                            }
+
+                        if current.question == 1 {
+                            Picker("Pick a unit", selection: $userUnit) {
+                                // Placeholder tagged "" so the wheel never shows a unit that isn't actually selected
+                                Text("Unit")
+                                    .font(.system(size: Metrics.contentWidth * 0.05))
+                                    .padding(.vertical, UIScreen.main.bounds.height * 0.02)
+                                    .tag("")
+                                ForEach(possibleUnits, id: \.self) { option in
+                                    Text(option)
+                                        .font(.system(size: Metrics.contentWidth * 0.05))
+                                        .padding(.vertical, UIScreen.main.bounds.height * 0.02)
+                                        .tag(option)
+                                }
+                            }
+                            .pickerStyle(.wheel)
+                            .colorSchemeForBackground()
+                            .frame(width: Metrics.contentWidth * 0.2,
+                                   height: Metrics.contentWidth * 0.3)
+                        } else if current.question == 2 && current.shapeType == 4 {
+                            Picker("Pick a unit", selection: $userUnit) {
+                                Text("Unit")
+                                    .font(.system(size: Metrics.contentWidth * 0.05))
+                                    .padding(.vertical, UIScreen.main.bounds.height * 0.02)
+                                    .tag("")
+                                ForEach(possibleUnits, id: \.self) { option in
+                                    Text(option + "²")
+                                        .font(.system(size: Metrics.contentWidth * 0.05))
+                                        .padding(.vertical, UIScreen.main.bounds.height * 0.02)
+                                        .tag(option + "²")
+                                }
+                            }
+                            .pickerStyle(.wheel)
+                            .colorSchemeForBackground()
+                            .frame(width: Metrics.contentWidth * 0.2,
+                                   height: Metrics.contentWidth * 0.3)
+                        }
                     }
                 }
-
-                if current.question == 3 {
-                    Text("Is this angle: Acute, Right or Obtuse?")
-                        .scaledFont(size: UIScreen.main.bounds.width * 0.05)
-                        .foregroundStyle(.onBackground)
-                        .fontWeight(.bold)
-                }
-
-                HStack {
-                    TextField(answerBox: "Answer", text: $answerString)
-                        .answerBoxMargin()
-                        .background(Color.white)
-                        .foregroundColor(.black)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                        .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                        .font(.system(size: UIScreen.main.bounds.width * 0.05))
-                        .multilineTextAlignment(.center)
-                        .answerKeyboard(current.question == 3 ? .default : .numberPad)
-                        .onSubmit {
-                            checkAnswer()
-                            hideKeyboard()
-                        }
-
-                    if current.question == 1 {
-                        Picker("Pick a unit", selection: $userUnit) {
-                            // Placeholder tagged "" so the wheel never shows a unit that isn't actually selected
-                            Text("Unit")
-                                .font(.system(size: UIScreen.main.bounds.width * 0.05))
-                                .padding(.vertical, UIScreen.main.bounds.height * 0.02)
-                                .tag("")
-                            ForEach(possibleUnits, id: \.self) { option in
-                                Text(option)
-                                    .font(.system(size: UIScreen.main.bounds.width * 0.05))
-                                    .padding(.vertical, UIScreen.main.bounds.height * 0.02)
-                                    .tag(option)
-                            }
-                        }
-                        .pickerStyle(.wheel)
-                        .colorSchemeForBackground()
-                        .frame(width: UIScreen.main.bounds.width * 0.2,
-                               height: UIScreen.main.bounds.width * 0.3)
-                    } else if current.question == 2 && current.shapeType == 4 {
-                        Picker("Pick a unit", selection: $userUnit) {
-                            Text("Unit")
-                                .font(.system(size: UIScreen.main.bounds.width * 0.05))
-                                .padding(.vertical, UIScreen.main.bounds.height * 0.02)
-                                .tag("")
-                            ForEach(possibleUnits, id: \.self) { option in
-                                Text(option + "²")
-                                    .font(.system(size: UIScreen.main.bounds.width * 0.05))
-                                    .padding(.vertical, UIScreen.main.bounds.height * 0.02)
-                                    .tag(option + "²")
-                            }
-                        }
-                        .pickerStyle(.wheel)
-                        .colorSchemeForBackground()
-                        .frame(width: UIScreen.main.bounds.width * 0.2,
-                               height: UIScreen.main.bounds.width * 0.3)
-                    }
-                }
-                .padding(.vertical, 10)
 
                 if showMessage {
                     AnswerFeedbackText(message: responseMessage)
@@ -6595,14 +6721,15 @@ struct Year4GeometryView: View {
                         checkAnswer()
                     } label: {
                         Text("Enter ")
-                            .buttonBox(Color.white, cornerRadius: UIScreen.main.bounds.width * 0.015, tapMargin: 6)
+                            .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.075))
+                    .font(.system(size: Metrics.contentWidth * 0.075))
                     .multilineTextAlignment(.center)
                     .fontWeight(.bold)
-                    .padding()
+                    .padding(.horizontal)
+                    .padding(.vertical, isCompact ? 8 : nil)
                     
                     if progress.showSkipButton {
                         Button {
@@ -6626,10 +6753,27 @@ struct Year4GeometryView: View {
                 }
                 .questionSubmitRow()
             }
+            // The angle question fits above the keyboard on every iPhone as it is.
+            .compactWhileTyping($isCompact, allowed: current.question != 3)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
         .navigationBarBackButtonHidden(true)
         .questionScreen()
+    }
+
+    private var isShapeBesideAnswer: Bool {
+        isCompact && current.question != 3
+    }
+
+    /// The shape above the answer box, or beside it while the player types on a small screen. A layout rather than
+    /// two sets of views, so the answer box stays the same box as it moves, and keeps the keyboard.
+    private var figureLayout: AnyLayout {
+        isShapeBesideAnswer ? AnyLayout(HStackLayout(spacing: 24)) : AnyLayout(VStackLayout(spacing: 12))
+    }
+
+    /// The unit wheel beside the answer box, or under it while the shape is beside them.
+    private var answerLayout: AnyLayout {
+        isShapeBesideAnswer ? AnyLayout(VStackLayout(spacing: 8)) : AnyLayout(HStackLayout())
     }
 
     private func questionText() -> String {
@@ -6724,7 +6868,7 @@ struct ShapeView: View {
                     if i < labels.count && i < labelPositions.count {
                         Text("\(labels[i]) \(unitType)")
                             .foregroundStyle(.onBackground)
-                            .font(.system(size: max(UIScreen.main.bounds.width * 0.02, 12)))
+                            .font(.system(size: max(Metrics.contentWidth * 0.02, 12)))
                             .bold()
                             .position(labelPositions[i])
                     }
@@ -6866,13 +7010,18 @@ func calculatePolygonPoints(center: CGPoint, radius: CGFloat, sides: Int) -> [CG
     return points
 }
 
+/// Two arms from a corner: one pointing right and one turned `angle` degrees anticlockwise from it. Every angle the
+/// questions draw is between 10 and 170 degrees (`Year4GeometryQuestion.angles`), so the second arm always points
+/// up. The corner is at the bottom of the frame, so the frame needs to be only half as tall as it is wide, with no
+/// empty space below the arms.
 struct AngleDrawingView: Shape {
     var angle: Int
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        let center = CGPoint(x: rect.midX, y: rect.midY)
-        let radius = min(rect.width, rect.height) / 2 - 20
+        // 4 points up from the bottom, so the line drawn along the bottom arm stays inside the frame.
+        let center = CGPoint(x: rect.midX, y: rect.maxY - 4)
+        let radius = min(rect.width / 2, rect.height - 4) - 20
 
         path.move(to: center)
         
@@ -7011,17 +7160,15 @@ struct Year4MoneyView: View {
 
             VStack(spacing: 20) {
                 Text(current.text)
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                    .scaledFont(size: Metrics.contentWidth * 0.05)
                     .foregroundStyle(.onBackground)
                     .fontWeight(.bold)
                     .multilineTextAlignment(.center)
                     .padding(.top, 20)
                 
-                WorkingOutView(canvasView: $canvasView)
-                
                 HStack{
                     Text("£")
-                        .font(.system(size: UIScreen.main.bounds.width * 0.075))
+                        .font(.system(size: Metrics.contentWidth * 0.075))
                         .foregroundStyle(.onBackground)
                         .padding()
                         .fontWeight(.bold)
@@ -7032,9 +7179,9 @@ struct Year4MoneyView: View {
                         .answerBoxMargin()
                         .background(Color.white)
                         .foregroundColor(.black)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                        .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                        .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                        .cornerRadius(Metrics.contentWidth * 0.02)
+                        .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                        .font(.system(size: Metrics.contentWidth * 0.05))
                         .multilineTextAlignment(.center)
                         .answerKeyboard(.decimalPad)
                         .onSubmit {
@@ -7055,11 +7202,11 @@ struct Year4MoneyView: View {
                         checkAnswer()
                     } label: {
                         Text("Enter ")
-                            .buttonBox(Color.white, cornerRadius: UIScreen.main.bounds.width * 0.015, tapMargin: 6)
+                            .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.075))
+                    .font(.system(size: Metrics.contentWidth * 0.075))
                     .multilineTextAlignment(.center)
                     .fontWeight(.bold)
                     .padding()
@@ -7085,6 +7232,8 @@ struct Year4MoneyView: View {
                     }
                 }
                 .questionSubmitRow()
+
+                WorkingOutView(canvasView: $canvasView)
             }
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
@@ -7149,62 +7298,9 @@ struct Year4MoneyView: View {
 }
 
 struct Year5View: View {
-    @State private var isSidebarOpen : Bool = false
-    @EnvironmentObject var gameData: GameData
-
     var body: some View {
-        ZStack {
-            Color(hex: gameData.backgroundColourHex).opacity(gameData.backgroundOpacity)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    hideKeyboard()
-                }
-            VStack(){
-                NavigationBar(Back : true, Points : true, isSidebarOpen : $isSidebarOpen)
-                    .frame(maxWidth: .infinity)
-                    .edgesIgnoringSafeArea(.top)
-                    .padding(.top, UIScreen.main.bounds.height * 0.002)
-                Spacer()
-            }
-            VStack(spacing: 50) {
-                Text("Year 5")
-                    .font(.system(size: UIScreen.main.bounds.width * 0.2))
-                    .foregroundStyle(.onBackground)
-                    .fontWeight(.bold)
-                    .underline()
-                    .accessibilityAddTraits(.isHeader)
-                ScreenButton(to: .activity(.percentages)) {
-                    Text("Percentages")
-                        .padding()
-                        .font(.system(size: UIScreen.main.bounds.width * 0.1))
-                        .foregroundColor(Color.black)
-                        .fontWeight(.bold)
-                        .background(Color.white)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                }
-                ScreenButton(to: .activity(.statistics)) {
-                    Text("Statistics")
-                        .padding()
-                        .font(.system(size: UIScreen.main.bounds.width * 0.1))
-                        .foregroundColor(Color.black)
-                        .fontWeight(.bold)
-                        .background(Color.white)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                }
-                ScreenButton(to: .activity(.volume)) {
-                    Text("Volume")
-                        .padding()
-                        .font(.system(size: UIScreen.main.bounds.width * 0.1))
-                        .foregroundColor(Color.black)
-                        .fontWeight(.bold)
-                        .background(Color.white)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                        
-                }
-            }
-        }
-        .navigationBarBackButtonHidden(true)
-        .adBreakPoint()
+        YearMenu(year: 5)
+            .adBreakPoint()
     }
 }
 
@@ -7240,26 +7336,24 @@ struct Year5PercentagesView: View {
             // an iPhone SE without scrolling.
             VStack(spacing: 12) {
                 Text(questionText)
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                    .scaledFont(size: Metrics.contentWidth * 0.05)
                     .foregroundStyle(.onBackground)
                     .padding()
                     .fontWeight(.bold)
                 
                 Text("What is the amount?")
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                    .scaledFont(size: Metrics.contentWidth * 0.05)
                     .foregroundStyle(.onBackground)
                     .padding()
                     .fontWeight(.bold)
-                
-                WorkingOutView(canvasView: $canvasView)
                 
                 TextField(answerBox: "Answer", text: $answerString)
                     .answerBoxMargin()
                     .background(Color.white)
                     .foregroundColor(.black)
-                    .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                    .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                    .cornerRadius(Metrics.contentWidth * 0.02)
+                    .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                    .font(.system(size: Metrics.contentWidth * 0.05))
                     .multilineTextAlignment(.center)
                     .answerKeyboard(.numberPad)
                     .onSubmit {
@@ -7279,11 +7373,11 @@ struct Year5PercentagesView: View {
                         checkAnswer()
                     } label: {
                         Text("Enter ")
-                            .buttonBox(Color.white, cornerRadius: UIScreen.main.bounds.width * 0.015, tapMargin: 6)
+                            .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.075))
+                    .font(.system(size: Metrics.contentWidth * 0.075))
                     .multilineTextAlignment(.center)
                     .fontWeight(.bold)
                     .padding()
@@ -7309,6 +7403,8 @@ struct Year5PercentagesView: View {
                     }
                 }
                 .questionSubmitRow()
+
+                WorkingOutView(canvasView: $canvasView)
             }
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
@@ -7630,6 +7726,9 @@ struct Year5StatisticsView: View {
     @State private var canvasView = PKCanvasView()
     @State private var progress = QuestionProgress()
     @State private var tallestBar = BarGraphView.usualTallestBar
+    /// Whether the answer box is beside the bar chart, because the question doesn't fit above the keyboard with the box
+    /// under the chart. See `compactWhileTyping(_:allowed:)`.
+    @State private var isCompact = false
 
     var body: some View {
         ZStack {
@@ -7639,35 +7738,39 @@ struct Year5StatisticsView: View {
                     hideKeyboard()
                 }
 
-            VStack(spacing: 20) {
+            // Spaced closely enough for the question, the bar chart, the answer box and Enter to fit above the keyboard
+            // on most iPhones, so the question stays in view while the player types. Where they don't, the answer box
+            // goes beside the chart while the player types, with smaller gaps (`isCompact`).
+            VStack(spacing: isCompact ? 6 : 12) {
                 Text(current.text)
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                    .scaledFont(size: Metrics.contentWidth * 0.05)
                     .foregroundStyle(.onBackground)
                     .fontWeight(.bold)
                     .multilineTextAlignment(.center)
-                    .padding()
+                    .questionTop()
+                    .padding([.horizontal, .top])
 
-                if current.kind == .highestBar {
-                    // As tall as its bars and labels, which the fixed 200 points it had wasn't at large text sizes.
-                    BarGraphView(data: current.bars, tallestBar: tallestBar)
-                        .padding()
-                } else {
-                    WorkingOutView(canvasView: $canvasView)
-                }
-
-                TextField(answerBox: "Answer", text: $answerString)
-                    .answerBoxMargin()
-                    .background(Color.white)
-                    .foregroundColor(.black)
-                    .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                    .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.05))
-                    .multilineTextAlignment(.center)
-                    .answerKeyboard(current.kind == .highestBar ? .default : .decimalPad)
-                    .onSubmit {
-                        checkAnswer()
-                        hideKeyboard()
+                chartLayout {
+                    if current.kind == .highestBar {
+                        // As tall as its bars and labels, which the fixed 200 points it had wasn't at large text sizes.
+                        BarGraphView(data: current.bars, tallestBar: tallestBar)
+                            .padding(.horizontal)
                     }
+
+                    TextField(answerBox: "Answer", text: $answerString)
+                        .answerBoxMargin()
+                        .background(Color.white)
+                        .foregroundColor(.black)
+                        .cornerRadius(Metrics.contentWidth * 0.02)
+                        .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                        .font(.system(size: Metrics.contentWidth * 0.05))
+                        .multilineTextAlignment(.center)
+                        .answerKeyboard(current.kind == .highestBar ? .default : .decimalPad)
+                        .onSubmit {
+                            checkAnswer()
+                            hideKeyboard()
+                        }
+                }
 
                 if showMessage {
                     AnswerFeedbackText(message: responseMessage)
@@ -7681,11 +7784,11 @@ struct Year5StatisticsView: View {
                         checkAnswer()
                     } label: {
                         Text("Enter ")
-                            .buttonBox(Color.white, cornerRadius: UIScreen.main.bounds.width * 0.015, tapMargin: 6)
+                            .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.075))
+                    .font(.system(size: Metrics.contentWidth * 0.075))
                     .multilineTextAlignment(.center)
                     .fontWeight(.bold)
                     .padding()
@@ -7711,15 +7814,27 @@ struct Year5StatisticsView: View {
                     }
                 }
                 .questionSubmitRow()
+
+                if current.kind != .highestBar {
+                    WorkingOutView(canvasView: $canvasView)
+                }
             }
             // With large text the bar chart, the answer box and Enter don't all fit on an iPhone, so the bars are
             // drawn shorter there.
-            .fitOnScreen(by: $tallestBar, usual: BarGraphView.usualTallestBar,
-                         minimum: BarGraphView.usualTallestBar / 2, paused: showMessage || current.kind != .highestBar)
+            .fitOnScreen(by: $tallestBar, usual: BarGraphView.usualTallestBar, minimum: BarGraphView.usualTallestBar / 2,
+                         paused: showMessage || current.kind != .highestBar || isCompact)
+            .compactWhileTyping($isCompact, allowed: current.kind == .highestBar)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
         .navigationBarBackButtonHidden(true)
         .questionScreen()
+    }
+
+    /// The answer box under the bar chart, or beside it while the player types on a small screen. A layout rather than
+    /// two sets of views, so the answer box stays the same box as it moves, and keeps the keyboard.
+    private var chartLayout: AnyLayout {
+        isCompact && current.kind == .highestBar
+            ? AnyLayout(HStackLayout(spacing: 8)) : AnyLayout(VStackLayout(spacing: 12))
     }
 
     private func checkAnswer() {
@@ -7773,8 +7888,9 @@ struct Year5StatisticsView: View {
 }
 
 struct BarGraphView: View {
-    /// The height of a bar with the largest value, 15.
-    static let usualTallestBar: CGFloat = 150
+    /// The height of a bar with the largest value, 15. Short enough for the question, the chart, the answer box and
+    /// Enter to fit above the keyboard and its suggestion bar on most iPhones (150 points didn't).
+    static let usualTallestBar: CGFloat = 130
 
     var data: [String: Int]
     /// Shorter than usual when the question doesn't otherwise fit on the screen. Each bar has its value written above
@@ -7784,7 +7900,8 @@ struct BarGraphView: View {
     var body: some View {
         HStack(alignment: .bottom, spacing: 10) {
             ForEach(data.sorted(by: { $0.key < $1.key }), id: \.key) { category, value in
-                VStack {
+                // Close to the bar, which saves 8 points of height so the question fits above the keyboard.
+                VStack(spacing: 4) {
                     // The usual text size limit: at the largest sizes the numbers and letters were taller than the
                     // space the chart had, and ran into the answer box.
                     Text("\(value)")
@@ -7919,6 +8036,10 @@ struct Year5VolumeView: View {
     @State private var padHeight = WorkingOutView.usualPadHeight
     @State private var isSidebarOpen : Bool = false
     @State private var progress = QuestionProgress()
+    /// Whether the cube or cuboid is beside the words, because the question doesn't fit above the keyboard with the
+    /// picture above them. See `compactWhileTyping(_:allowed:)`.
+    @State private var isCompact = false
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         ZStack {
@@ -7929,25 +8050,28 @@ struct Year5VolumeView: View {
 
             // 12 between the parts rather than 20, so a cube or cuboid fits on more screens.
             VStack(spacing: 12) {
-                if current.kind != .comparison {
-                    VolumeShapeView(
-                        side: current.length,
-                        length: current.length,
-                        width: current.width,
-                        height: current.height
-                    )
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(current.figureDescription)
-                    .accessibilityAddTraits(.isImage)
+                pictureLayout {
+                    if current.kind != .comparison {
+                        VolumeShapeView(
+                            side: current.length,
+                            length: current.length,
+                            width: current.width,
+                            height: current.height
+                        )
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(current.figureDescription)
+                        .accessibilityAddTraits(.isImage)
+                    }
+
+                    Text(current.text)
+                        .scaledFont(size: Metrics.contentWidth * 0.05)
+                        .foregroundStyle(.onBackground)
+                        .fontWeight(.bold)
+                        .multilineTextAlignment(.center)
                 }
-
-                Text(current.text)
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
-                    .foregroundStyle(.onBackground)
-                    .fontWeight(.bold)
-                    .multilineTextAlignment(.center)
-
-                WorkingOutView(canvasView: $canvasView, padHeight: padHeight)
+                // 16 points at each side of the screen, also while the picture is beside the words.
+                .padding(.horizontal)
+                .questionTop()
 
                 if current.kind != .comparison {
                     HStack {
@@ -7955,9 +8079,9 @@ struct Year5VolumeView: View {
                             .answerBoxMargin()
                             .background(Color.white)
                             .foregroundColor(.black)
-                            .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                            .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                            .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                            .cornerRadius(Metrics.contentWidth * 0.02)
+                            .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                            .font(.system(size: Metrics.contentWidth * 0.05))
                             .multilineTextAlignment(.center)
                             .answerKeyboard(.decimalPad)
                             .onSubmit {
@@ -7966,7 +8090,7 @@ struct Year5VolumeView: View {
                             }
 
                         Text("cm³")
-                            .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                            .font(.system(size: Metrics.contentWidth * 0.05))
                             .foregroundStyle(.onBackground)
                             .fontWeight(.bold)
                             .multilineTextAlignment(.center)
@@ -7977,9 +8101,9 @@ struct Year5VolumeView: View {
                         .answerBoxMargin()
                         .background(Color.white)
                         .foregroundColor(.black)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                        .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                        .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                        .cornerRadius(Metrics.contentWidth * 0.02)
+                        .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                        .font(.system(size: Metrics.contentWidth * 0.05))
                         .multilineTextAlignment(.center)
                         .keyboardType(.default)
                         .onSubmit {
@@ -8000,11 +8124,11 @@ struct Year5VolumeView: View {
                         checkAnswer()
                     } label: {
                         Text("Enter ")
-                            .buttonBox(Color.white, cornerRadius: UIScreen.main.bounds.width * 0.015, tapMargin: 6)
+                            .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.075))
+                    .font(.system(size: Metrics.contentWidth * 0.075))
                     .multilineTextAlignment(.center)
                     .fontWeight(.bold)
                     .padding()
@@ -8030,15 +8154,27 @@ struct Year5VolumeView: View {
                     }
                 }
                 .questionSubmitRow()
+
+                WorkingOutView(canvasView: $canvasView, padHeight: padHeight)
             }
-            // On most iPhones a cube or cuboid is too tall to fit above the answer box and Enter, so the drawing
-            // pad gives up as much height as that takes.
+            // On most iPhones a cube or cuboid, the answer box, Enter and the drawing pad below them don't all fit on
+            // the screen, so the pad gives up as much height as that takes. It keeps that height while the picture is
+            // beside the words.
             .fitOnScreen(by: $padHeight, usual: WorkingOutView.usualPadHeight,
-                         minimum: WorkingOutView.usualPadHeight / 2, paused: showMessage)
+                         minimum: WorkingOutView.usualPadHeight / 2, paused: showMessage || isCompact)
+            // At the accessibility text sizes the words are too big for the narrow column beside the picture, so the
+            // picture keeps its place above them and the question scrolls instead.
+            .compactWhileTyping($isCompact,
+                                allowed: current.kind != .comparison && !dynamicTypeSize.isAccessibilitySize)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
         .navigationBarBackButtonHidden(true)
         .questionScreen()
+    }
+
+    /// The cube or cuboid above the words, or beside them while the player types on a small screen.
+    private var pictureLayout: AnyLayout {
+        isCompact ? AnyLayout(HStackLayout(spacing: 12)) : AnyLayout(VStackLayout(spacing: 12))
     }
 
     private func checkAnswer() {
@@ -8149,7 +8285,8 @@ struct VolumeShapeView: View {
                     ForEach([-1, 0, 1], id: \.self) { yOffset in
                         Text(words)
                             .foregroundColor(Color(outline))
-                            .offset(x: CGFloat(xOffset), y: CGFloat(yOffset))
+                            .offset(x: CGFloat(xOffset) * VolumeShapeLayout.outlineWidth,
+                                    y: CGFloat(yOffset) * VolumeShapeLayout.outlineWidth)
                     }
                 }
                 .accessibilityHidden(true)
@@ -8193,6 +8330,13 @@ struct VolumeShapeLayout {
     /// and 50 down, joined to it.
     static let drawingSize = CGSize(width: 150, height: 150)
     static let lineWidth: CGFloat = 2
+    /// How far the lines reach past the corners they meet at. Where two lines meet at 45°, the mitred join comes to a
+    /// point half a line's width × cot 22.5° (2.4 points) beyond the corner: straight out to the left at the two left
+    /// corners, and straight up at the top of the right-hand face. Rounded up to a whole point, this much room round
+    /// the drawing keeps all of it inside the diagram, so no corner is cut off by the edge of the screen or the header.
+    static let inkOverhang = (lineWidth / 2 / tan(.pi / 8)).rounded(.up)
+    /// A measurement's outline, when it has one, is drawn this far round its words.
+    static let outlineWidth: CGFloat = 1
     /// The clear space between a measurement and the edge of the nearest line. A measurement's outline, when it has
     /// one, takes a point of this.
     static let gap: CGFloat = 4
@@ -8233,7 +8377,11 @@ struct VolumeShapeLayout {
         let lengthLabel = CGRect(origin: CGPoint(x: 125 + out - length.width / 2, y: 25 - out - length.height / 2),
                                  size: length)
 
-        let everything = [widthLabel, lengthLabel, heightLabel].reduce(drawing) { $0.union($1) }
+        // Everything drawn is inside the diagram: the points of the corners round the drawing, and the outlines round
+        // the measurements.
+        let everything = [widthLabel, lengthLabel, heightLabel]
+            .map { $0.insetBy(dx: -Self.outlineWidth, dy: -Self.outlineWidth) }
+            .reduce(drawing.insetBy(dx: -Self.inkOverhang, dy: -Self.inkOverhang)) { $0.union($1) }
         let shift = CGAffineTransform(translationX: -everything.minX, y: -everything.minY)
         self.drawing = drawing.applying(shift)
         self.widthLabel = widthLabel.applying(shift)
@@ -8267,63 +8415,9 @@ struct VolumeShapeArrangement: Layout {
 }
 
 struct Year6View: View {
-    @State private var isSidebarOpen : Bool = false
-    @EnvironmentObject var gameData: GameData
-
     var body: some View {
-        ZStack {
-            Color(hex: gameData.backgroundColourHex).opacity(gameData.backgroundOpacity)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    hideKeyboard()
-                }
-                
-            VStack(){
-                NavigationBar(Back : true, Points : true, isSidebarOpen : $isSidebarOpen)
-                    .frame(maxWidth: .infinity)
-                    .edgesIgnoringSafeArea(.top)
-                    .padding(.top, UIScreen.main.bounds.height * 0.002)
-                Spacer()
-            }
-            VStack(spacing: 50) {
-                Text("Year 6")
-                    .font(.system(size: UIScreen.main.bounds.width * 0.2))
-                    .foregroundStyle(.onBackground)
-                    .fontWeight(.bold)
-                    .underline()
-                    .accessibilityAddTraits(.isHeader)
-                ScreenButton(to: .activity(.algebra)) {
-                    Text("Algebra")
-                        .padding()
-                        .font(.system(size: UIScreen.main.bounds.width * 0.1))
-                        .foregroundColor(Color.black)
-                        .fontWeight(.bold)
-                        .background(Color.white)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                }
-                ScreenButton(to: .activity(.probability)) {
-                    Text("Probability")
-                        .padding()
-                        .font(.system(size: UIScreen.main.bounds.width * 0.1))
-                        .foregroundColor(Color.black)
-                        .fontWeight(.bold)
-                        .background(Color.white)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                }
-                ScreenButton(to: .activity(.ratios)) {
-                    Text("Ratios")
-                        .padding()
-                        .font(.system(size: UIScreen.main.bounds.width * 0.1))
-                        .foregroundColor(Color.black)
-                        .fontWeight(.bold)
-                        .background(Color.white)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                        
-                }
-            }
-        }
-        .navigationBarBackButtonHidden(true)
-        .adBreakPoint()
+        YearMenu(year: 6)
+            .adBreakPoint()
     }
 }
 
@@ -8515,19 +8609,18 @@ struct Year6AlgebraView: View {
             VStack(spacing: 20) {
                 Text(current.expression)
                     .accessibilityLabel(current.spokenExpression)
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                    .scaledFont(size: Metrics.contentWidth * 0.05)
                     .fontWeight(.bold)
                     .foregroundStyle(.onBackground)
                 Text(current.instruction)
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                    .scaledFont(size: Metrics.contentWidth * 0.05)
                     .fontWeight(.bold)
                     .foregroundStyle(.onBackground)
 
-                WorkingOutView(canvasView: $canvasView)
                 HStack {
                     if current.kind == .solve {
                         Text("x =")
-                            .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                            .font(.system(size: Metrics.contentWidth * 0.05))
                             .fontWeight(.bold)
                             .foregroundStyle(.onBackground)
                     }
@@ -8536,9 +8629,9 @@ struct Year6AlgebraView: View {
                         .answerBoxMargin()
                         .background(Color.white)
                         .foregroundColor(.black)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                        .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                        .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                        .cornerRadius(Metrics.contentWidth * 0.02)
+                        .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                        .font(.system(size: Metrics.contentWidth * 0.05))
                         .multilineTextAlignment(.center)
                         .keyboardType(.numbersAndPunctuation)
                         .onSubmit {
@@ -8559,11 +8652,11 @@ struct Year6AlgebraView: View {
                         checkAnswer()
                     } label: {
                         Text("Enter ")
-                            .buttonBox(Color.white, cornerRadius: UIScreen.main.bounds.width * 0.015, tapMargin: 6)
+                            .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.075))
+                    .font(.system(size: Metrics.contentWidth * 0.075))
                     .multilineTextAlignment(.center)
                     .fontWeight(.bold)
                     .padding()
@@ -8589,6 +8682,8 @@ struct Year6AlgebraView: View {
                     }
                 }
                 .questionSubmitRow()
+
+                WorkingOutView(canvasView: $canvasView)
             }
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
@@ -8821,13 +8916,11 @@ struct Year6ProbabilityView: View {
 
             VStack {
                 Text(current.text)
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                    .scaledFont(size: Metrics.contentWidth * 0.05)
                     .foregroundStyle(.onBackground)
                     .fontWeight(.bold)
                     .multilineTextAlignment(.center)
                     .padding()
-
-                WorkingOutView(canvasView: $canvasView, padHeight: padHeight)
 
                 FractionAnswerBoxes(numerator: $numerator, denominator: $denominator) {
                     checkAnswer()
@@ -8846,11 +8939,11 @@ struct Year6ProbabilityView: View {
                         checkAnswer()
                     } label: {
                         Text("Enter")
-                            .buttonBox(Color.white, cornerRadius: UIScreen.main.bounds.width * 0.015, tapMargin: 6)
+                            .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.075))
+                    .font(.system(size: Metrics.contentWidth * 0.075))
                     .fontWeight(.bold)
                     .padding()
 
@@ -8875,9 +8968,11 @@ struct Year6ProbabilityView: View {
                     }
                 }
                 .questionSubmitRow()
+
+                WorkingOutView(canvasView: $canvasView, padHeight: padHeight)
             }
-            // With large text on an iPhone, the question, the drawing pad, the fraction and Enter don't all fit, so
-            // the drawing pad gives up as much height as that takes.
+            // With large text on an iPhone, the question, the fraction, Enter and the drawing pad below them don't all
+            // fit, so the pad gives up as much height as that takes.
             .fitOnScreen(by: $padHeight, usual: WorkingOutView.usualPadHeight,
                          minimum: WorkingOutView.usualPadHeight / 2, paused: showMessage)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
@@ -9092,14 +9187,11 @@ struct Year6RatiosView: View {
             VStack {
                 Text(current.text)
                     .accessibilityLabel(current.spokenText)
-                    .scaledFont(size: UIScreen.main.bounds.width * 0.05)
+                    .scaledFont(size: Metrics.contentWidth * 0.05)
                     .foregroundStyle(.onBackground)
                     .fontWeight(.bold)
                     .multilineTextAlignment(.center)
                     .padding()
-
-                WorkingOutView(canvasView: $canvasView)
-                    .padding(.bottom, 20)
 
                 if current.asksForRatio {
                     HStack(spacing: 5) {
@@ -9108,9 +9200,9 @@ struct Year6RatiosView: View {
                             .answerBoxMargin()
                             .background(Color.white)
                             .foregroundColor(.black)
-                            .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                            .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                            .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                            .cornerRadius(Metrics.contentWidth * 0.02)
+                            .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                            .font(.system(size: Metrics.contentWidth * 0.05))
                             .multilineTextAlignment(.center)
                             .answerKeyboard(.numberPad)
                             .onSubmit {
@@ -9119,7 +9211,7 @@ struct Year6RatiosView: View {
                             }
 
                         Text(":")
-                            .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                            .font(.system(size: Metrics.contentWidth * 0.05))
                             .fontWeight(.bold)
                             .foregroundStyle(.onBackground)
                             .accessibilityHidden(true)
@@ -9129,9 +9221,9 @@ struct Year6RatiosView: View {
                             .answerBoxMargin()
                             .background(Color.white)
                             .foregroundColor(.black)
-                            .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                            .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                            .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                            .cornerRadius(Metrics.contentWidth * 0.02)
+                            .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                            .font(.system(size: Metrics.contentWidth * 0.05))
                             .multilineTextAlignment(.center)
                             .answerKeyboard(.numberPad)
                             .onSubmit {
@@ -9144,9 +9236,9 @@ struct Year6RatiosView: View {
                         .answerBoxMargin()
                         .background(Color.white)
                         .foregroundColor(.black)
-                        .cornerRadius(UIScreen.main.bounds.width * 0.02)
-                        .frame(width: UIScreen.main.bounds.width / 3, height: UIScreen.main.bounds.width * 0.15)
-                        .font(.system(size: UIScreen.main.bounds.width * 0.05))
+                        .cornerRadius(Metrics.contentWidth * 0.02)
+                        .frame(width: Metrics.contentWidth / 3, height: Metrics.contentWidth * 0.15)
+                        .font(.system(size: Metrics.contentWidth * 0.05))
                         .multilineTextAlignment(.center)
                         .answerKeyboard(.numberPad)
                         .onSubmit {
@@ -9167,11 +9259,11 @@ struct Year6RatiosView: View {
                         checkAnswer()
                     } label: {
                         Text("Enter ")
-                            .buttonBox(Color.white, cornerRadius: UIScreen.main.bounds.width * 0.015, tapMargin: 6)
+                            .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
-                    .font(.system(size: UIScreen.main.bounds.width * 0.075))
+                    .font(.system(size: Metrics.contentWidth * 0.075))
                     .multilineTextAlignment(.center)
                     .fontWeight(.bold)
                     .padding()
@@ -9197,6 +9289,8 @@ struct Year6RatiosView: View {
                     }
                 }
                 .questionSubmitRow()
+
+                WorkingOutView(canvasView: $canvasView)
             }
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
@@ -9286,7 +9380,7 @@ struct ContentView: View {
             .navigationDestination(for: Screen.self) { screen in
                 destination(for: screen)
                     .environment(\.currentScreen, screen)
-                    .environment(\.chosenBackground, chosenBackground)
+                    .environment(\.chosenBackground, gameData.chosenBackground)
                     .environmentObject(gameData)
                     .environmentObject(purchaseManager)
                     .environmentObject(navigator)
@@ -9307,11 +9401,7 @@ struct ContentView: View {
             }
         }
         // Words and drawings on the background work out their colours from it. See `ReadableOnBackground`.
-        .environment(\.chosenBackground, chosenBackground)
-    }
-
-    private var chosenBackground: ChosenBackground {
-        ChosenBackground(hex: gameData.backgroundColourHex, opacity: gameData.backgroundOpacity)
+        .environment(\.chosenBackground, gameData.chosenBackground)
     }
 
     @ViewBuilder
