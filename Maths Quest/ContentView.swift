@@ -1584,12 +1584,14 @@ private enum QuestionSubmitRow: Hashable {
 
 /// Where the part of a question that must stay in view while the player types starts and ends: the top of
 /// `questionTop()` and the bottom of `questionSubmitRow()`. See `compactWhileTyping(_:allowed:)`. Also where the
-/// message after Enter is, while it shows (`AnswerFeedbackText`).
+/// message after Enter is, while it shows (`AnswerFeedbackText`), and the card below the row, while there is one
+/// (`cardBelowSubmitRow()`).
 private struct QuestionBounds: PreferenceKey {
     struct Value {
         var top: Anchor<CGRect>?
         var submitRow: Anchor<CGRect>?
         var message: Anchor<CGRect>?
+        var cardBelowRow: Anchor<CGRect>?
     }
 
     static let defaultValue = Value()
@@ -1599,7 +1601,33 @@ private struct QuestionBounds: PreferenceKey {
         value.top = value.top ?? next.top
         value.submitRow = value.submitRow ?? next.submitRow
         value.message = value.message ?? next.message
+        value.cardBelowRow = value.cardBelowRow ?? next.cardBelowRow
     }
+}
+
+/// Marks a card under the row with Enter, such as the hint after a wrong answer (Stage 9C), which `QuestionLayout`
+/// brings into view with the row while the keyboard is down.
+private enum CardBelowSubmitRow: Hashable {
+    case id
+}
+
+/// Marks the top of the question (`questionTop()`, or the top of the activity where it isn't marked), which
+/// `QuestionLayout` scrolls to when the question doesn't fit with all of the card below the row. Stage 9C.
+private enum QuestionTopMarker: Hashable {
+    case id
+}
+
+/// How much of the question fits in the space, with the keyboard down, from its top down to the card below the row.
+/// Stage 9C. See `QuestionLayout`.
+private enum CardBelowRowFit: Equatable {
+    /// There's no card.
+    case noCard
+    /// Everything down to the bottom of the card.
+    case wholeCard
+    /// Everything down to the row with Enter, and only some of the card.
+    case partOfCard
+    /// Not even everything down to the row.
+    case notTheRow
 }
 
 /// Marks the first line of the message after Enter, which `QuestionLayout` keeps in view if the keyboard comes up
@@ -1638,11 +1666,22 @@ private enum AnswerFeedbackFirstLine: Hashable {
 /// with Enter, so whenever the top of the question is in view with the row above the keyboard, it's in view with the
 /// first line of the message there too, and so is the answer box above it. Enter can't be pressed until the message
 /// has gone, and the row comes back above the keyboard then.
+///
+/// Stage 9C: a card the player reads but can type without, such as the hint after a wrong answer, goes below the row
+/// too, marked with `cardBelowSubmitRow()`. While the keyboard is down, the question scrolls the bottom of the card,
+/// rather than the row, to the bottom of the space, so the card comes into view with the row and the message above
+/// it. The question comes first, though: where everything from its top to the bottom of the card is too tall for the
+/// space, as on an iPhone SE while the message shows, the question scrolls its top to the top of the space instead,
+/// which shows the row and as much of the card as there's room for. Once the message has gone, the card usually fits.
+/// While the keyboard is up, the row goes above the keyboard as usual, and the keyboard may cover the card.
 struct QuestionLayout<Content: View>: View {
     @Binding var isSidebarOpen: Bool
     let content: Content
     @State private var roomWithoutKeyboard: CGFloat = 0
     @State private var isMessageShowing = false
+    @State private var cardBelowRowFit = CardBelowRowFit.noCard
+    @State private var questionTopY: CGFloat = 0
+    @State private var isKeyboardUp = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -1653,17 +1692,34 @@ struct QuestionLayout<Content: View>: View {
                 .padding(.top, UIScreen.main.bounds.height * 0.002)
 
             GeometryReader { space in
+                let roomAboveKeyboard = space.size.height < roomWithoutKeyboard - 100 ? space.size.height : 0
                 ScrollViewReader { scroller in
                     ScrollView {
                         content
                             .environment(\.questionRoom, roomWithoutKeyboard)
-                            .environment(\.roomAboveKeyboard,
-                                         space.size.height < roomWithoutKeyboard - 100 ? space.size.height : 0)
+                            .environment(\.roomAboveKeyboard, roomAboveKeyboard)
                             .backgroundPreferenceValue(QuestionBounds.self) { bounds in
+                                GeometryReader { proxy in
+                                    let top = bounds.top.map { proxy[$0].minY } ?? 0
+                                    let fit = Self.measureCardBelowRow(bounds, from: top, in: proxy,
+                                                                       room: roomWithoutKeyboard)
+                                    Color.clear
+                                        .onChange(of: bounds.message != nil, initial: true) { _, isShowing in
+                                            isMessageShowing = isShowing
+                                        }
+                                        .onChange(of: fit, initial: true) { _, fit in
+                                            cardBelowRowFit = fit
+                                        }
+                                        .onChange(of: top, initial: true) { _, top in
+                                            questionTopY = top
+                                        }
+                                }
+                            }
+                            .background(alignment: .top) {
                                 Color.clear
-                                    .onChange(of: bounds.message != nil, initial: true) { _, isShowing in
-                                        isMessageShowing = isShowing
-                                    }
+                                    .frame(height: 1)
+                                    .id(QuestionTopMarker.id)
+                                    .padding(.top, max(0, questionTopY))
                             }
                             // On iPad the question sits in a centred column, as the menus and forms do, and its
                             // sizes are worked out from the column's width (`Metrics.contentWidth`).
@@ -1680,7 +1736,12 @@ struct QuestionLayout<Content: View>: View {
                     }
                     .scrollBounceBehavior(.basedOnSize)
                     .scrollDismissesKeyboard(.interactively)
-                    .modifier(RevealSubmitRowByScrolling(scroller: scroller))
+                    // Read as each scroll runs, which is after the card has gone in or the keyboard has moved.
+                    .modifier(RevealSubmitRowByScrolling(scroller: scroller,
+                                                         cardBelowRow: { isKeyboardUp ? .noCard : cardBelowRowFit }))
+                    .onChange(of: roomAboveKeyboard > 0, initial: true) { _, isUp in
+                        isKeyboardUp = isUp
+                    }
                     .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
                         withAnimation(reduceMotion ? nil : .default) {
                             if isMessageShowing {
@@ -1702,6 +1763,15 @@ struct QuestionLayout<Content: View>: View {
             }
         }
     }
+
+    /// How much fits in `room` from `top` down to the card below the row. Half a point is allowed for rounding.
+    private static func measureCardBelowRow(_ bounds: QuestionBounds.Value, from top: CGFloat, in proxy: GeometryProxy,
+                                            room: CGFloat) -> CardBelowRowFit {
+        guard let card = bounds.cardBelowRow else { return .noCard }
+        if proxy[card].maxY - top <= room + 0.5 { return .wholeCard }
+        if let row = bounds.submitRow, proxy[row].maxY - top <= room + 0.5 { return .partOfCard }
+        return .notTheRow
+    }
 }
 
 /// The message after Enter, such as "Correct!" in green or "Incorrect. Try Again!" in red. The words say whether the
@@ -1709,6 +1779,11 @@ struct QuestionLayout<Content: View>: View {
 ///
 /// VoiceOver's focus stays on Enter, so it wouldn't notice the message appear. It reads the message out instead, once,
 /// rather than once for every copy of the text that makes up the outline.
+///
+/// Stage 9C: an activity can add a `detail` line under the message, such as "4 × 5 = 20" under "Correct!", and words
+/// that are shown somewhere else but belong with the message, `alsoSaying`, such as the hint on its card. VoiceOver
+/// reads the message, the detail and those words as one announcement, so nothing is read twice or cut off. The message
+/// stays a text of its own, so it's found by its words as before.
 ///
 /// The message goes just above Enter, so on a question that only just fits it can push Enter and Skip below the bottom
 /// of the screen. As it appears, it scrolls them back into view. After any message but "Correct!" the question stays,
@@ -1719,6 +1794,10 @@ struct QuestionLayout<Content: View>: View {
 struct AnswerFeedbackText: View {
     let message: String
     var outlined = true
+    /// A line under the message, such as "4 × 5 = 20" under "Correct!". Stage 9C.
+    var detail: SpokenText? = nil
+    /// Read out after the message and the detail, but shown elsewhere, such as "Hint: …". Stage 9C.
+    var alsoSaying: String? = nil
     @Environment(\.revealSubmitRow) private var revealSubmitRow
     @Environment(\.roomAboveKeyboard) private var roomAboveKeyboard
 
@@ -1726,7 +1805,44 @@ struct AnswerFeedbackText: View {
         message == "Correct!"
     }
 
+    /// Everything VoiceOver reads out as the message appears, in one announcement.
+    var announcement: String {
+        [message, detail?.spoken, alsoSaying].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
     var body: some View {
+        VStack(spacing: 4) {
+            headline
+            if let detail {
+                Text(detail.text)
+                    .scaledFont(size: Metrics.contentWidth * 0.05, maximum: 34)
+                    .fontWeight(.bold)
+                    .foregroundStyle(.onBackground)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel(detail.spoken)
+                    .accessibilityIdentifier("AnswerFeedbackDetail")
+            }
+        }
+        .background(alignment: .top) {
+            Color.clear
+                .frame(height: UIFont.systemFont(ofSize: Metrics.contentWidth * 0.075, weight: .bold).lineHeight)
+                .id(AnswerFeedbackFirstLine.id)
+        }
+        .anchorPreference(key: QuestionBounds.self, value: .bounds) { QuestionBounds.Value(message: $0) }
+        .onAppear {
+            announce(announcement)
+            revealSubmitRow()
+        }
+        .onChange(of: announcement) { _, newAnnouncement in announce(newAnnouncement) }
+        .onDisappear {
+            if !isCorrect || roomAboveKeyboard > 0 {
+                revealSubmitRow()
+            }
+        }
+    }
+
+    private var headline: some View {
         ZStack {
             if outlined {
                 ForEach([-2, -1, 0, 1, 2], id: \.self) { xOffset in
@@ -1745,22 +1861,6 @@ struct AnswerFeedbackText: View {
                 .foregroundColor(isCorrect ? .green : .red)
                 .font(.system(size: Metrics.contentWidth * 0.075))
                 .fontWeight(.bold)
-        }
-        .background(alignment: .top) {
-            Color.clear
-                .frame(height: UIFont.systemFont(ofSize: Metrics.contentWidth * 0.075, weight: .bold).lineHeight)
-                .id(AnswerFeedbackFirstLine.id)
-        }
-        .anchorPreference(key: QuestionBounds.self, value: .bounds) { QuestionBounds.Value(message: $0) }
-        .onAppear {
-            announce(message)
-            revealSubmitRow()
-        }
-        .onChange(of: message) { _, newMessage in announce(newMessage) }
-        .onDisappear {
-            if !isCorrect || roomAboveKeyboard > 0 {
-                revealSubmitRow()
-            }
         }
     }
 }
@@ -1787,13 +1887,29 @@ struct RevealSubmitRow {
 /// bottom of the space, or as near as the question allows, once the question has been laid out again with the
 /// message in it. It doesn't scroll to the end of the question: on a question with a working-out pad, that's the
 /// pad, below the row, and scrolling there on a small screen could hide the top of the question. See `QuestionLayout`.
+///
+/// Stage 9C: while there's a card below the row and the keyboard is down, it scrolls the bottom of the card there
+/// instead, which brings the row into view too (`cardBelowSubmitRow()`). If the question doesn't fit from its top to
+/// the bottom of the card, it scrolls the top of the question to the top of the space, which keeps the question and
+/// the row in view and shows as much of the card as fits. If not even the row fits, it leaves the row at the bottom.
 private struct RevealSubmitRowByScrolling: ViewModifier {
     let scroller: ScrollViewProxy
+    /// How much fits down to the card below the row, or `.noCard` while the keyboard is up, asked as the scroll runs.
+    let cardBelowRow: () -> CardBelowRowFit
 
     func body(content: Content) -> some View {
         content.environment(\.revealSubmitRow, RevealSubmitRow {
             DispatchQueue.main.async {
                 scroller.scrollTo(QuestionSubmitRow.id, anchor: .bottom)
+                // Scrolling to a card that has just gone does nothing, which leaves the row where it was put.
+                switch cardBelowRow() {
+                case .wholeCard:
+                    scroller.scrollTo(CardBelowSubmitRow.id, anchor: .bottom)
+                case .partOfCard:
+                    scroller.scrollTo(QuestionTopMarker.id, anchor: .top)
+                case .noCard, .notTheRow:
+                    break
+                }
             }
         })
     }
@@ -1968,6 +2084,13 @@ extension View {
     func questionSubmitRow() -> some View {
         id(QuestionSubmitRow.id)
             .anchorPreference(key: QuestionBounds.self, value: .bounds) { QuestionBounds.Value(submitRow: $0) }
+    }
+
+    /// Stage 9C: marks a card below the row with Enter, such as the hint, which `QuestionLayout` brings into view with
+    /// the row while the keyboard is down. One card at most, and only below the row.
+    func cardBelowSubmitRow() -> some View {
+        id(CardBelowSubmitRow.id)
+            .anchorPreference(key: QuestionBounds.self, value: .bounds) { QuestionBounds.Value(cardBelowRow: $0) }
     }
 
     /// Marks the top of what must stay in view while the player types: the words, or a picture above them. See
@@ -3956,6 +4079,10 @@ struct Year2MultiplicationView: View {
     /// Whether the gaps are smaller while the player types, because the question doesn't fit above the keyboard with
     /// the usual ones, as with the largest text on an iPhone SE. See `compactWhileTyping(_:allowed:)`.
     @State private var isCompact = false
+    /// Stage 9C: the hint after a counted wrong answer, until the question changes.
+    @State private var hint: SpokenText?
+    /// Stage 9C: the worked solution after Skip, until Next Question.
+    @State private var solution: WorkedSolution?
 
     var body: some View {
         ZStack {
@@ -3993,13 +4120,21 @@ struct Year2MultiplicationView: View {
                         checkAnswer()
                         hideKeyboard()
                     }
+                    .answeredBySolution(solution != nil)
 
                 if showMessage {
-                    AnswerFeedbackText(message: responseMessage)
+                    AnswerFeedbackText(message: responseMessage, detail: correctLine,
+                                       alsoSaying: hintAnnouncement)
                         .padding()
                         .transition(.answerFeedback)
                 }
 
+                ExplanationCards(hint: hint, solution: solution, place: .aboveSubmitRow)
+
+                if solution != nil {
+                    NextQuestionButton(action: nextQuestion)
+                        .questionSubmitRow()
+                } else {
                 HStack{
                     Button {
                         hideKeyboard()
@@ -4007,6 +4142,7 @@ struct Year2MultiplicationView: View {
                     } label: {
                         Text("Enter ")
                             .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
+                            .movesAtOnce(whenMessageAppears: showMessage)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
@@ -4023,7 +4159,7 @@ struct Year2MultiplicationView: View {
                                 
                                 AdManager.shared.showRewardedInterstitialAd(from: rootVC) {
                                     guard progress.recordSkip() else { return }
-                                    gameData.skipQuestion(resetQuestion: resetQuestion)
+                                    showSolution()
                                 }
                             }
                         } label: {
@@ -4036,6 +4172,9 @@ struct Year2MultiplicationView: View {
                     }
                 }
                 .questionSubmitRow()
+                }
+
+                ExplanationCards(hint: hint, solution: solution, place: .belowSubmitRow)
             }
             .compactWhileTyping($isCompact)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
@@ -4055,6 +4194,7 @@ struct Year2MultiplicationView: View {
         case .correct:
             guard progress.recordCorrectAnswer() else { return }
             responseMessage = "Correct!"
+            hint = nil
             showFeedback()
             gameData.points += 1
             gameData.totalQuestionsAnswered += 1
@@ -4065,6 +4205,7 @@ struct Year2MultiplicationView: View {
             }
         case .incorrect:
             responseMessage = "Incorrect. Try Again!"
+            hint = current.hint(after: answerString)
             sfxPlayer.playSound(named: "wrong", volume:gameData.sfxvolume)
             showFeedback()
             progress.recordWrongAttempt()
@@ -4075,7 +4216,32 @@ struct Year2MultiplicationView: View {
         current = Year2MultiplicationQuestion.random()
         answerString = ""
         responseMessage = ""
+        hint = nil
+        solution = nil
         progress.reset()
+    }
+
+    /// The line under "Correct!". See `AnswerFeedbackText`.
+    private var correctLine: SpokenText? {
+        responseMessage == "Correct!" ? current.correctLine : nil
+    }
+
+    /// The hint, read with "Incorrect. Try Again!". See `AnswerFeedbackText`.
+    private var hintAnnouncement: String? {
+        responseMessage == "Incorrect. Try Again!" ? hint.map { "Hint: \($0.spoken)" } : nil
+    }
+
+    /// After a rewarded Skip: the question stays, worked out, until Next Question. No point is given.
+    private func showSolution() {
+        hideKeyboard()
+        hint = nil
+        solution = current.workedSolution
+    }
+
+    /// Next Question, once only: a second tap finds no solution showing.
+    private func nextQuestion() {
+        guard solution != nil else { return }
+        resetQuestion()
     }
 
     private func showFeedback() {
@@ -4139,6 +4305,10 @@ struct Year2DivisionView: View {
     /// Whether the gaps are smaller while the player types, because the question doesn't fit above the keyboard with
     /// the usual ones, as with the largest text on an iPhone SE. See `compactWhileTyping(_:allowed:)`.
     @State private var isCompact = false
+    /// Stage 9C: the hint after a counted wrong answer, until the question changes.
+    @State private var hint: SpokenText?
+    /// Stage 9C: the worked solution after Skip, until Next Question.
+    @State private var solution: WorkedSolution?
 
     var body: some View {
         ZStack {
@@ -4176,13 +4346,21 @@ struct Year2DivisionView: View {
                         checkAnswer()
                         hideKeyboard()
                     }
+                    .answeredBySolution(solution != nil)
 
                 if showMessage {
-                    AnswerFeedbackText(message: responseMessage)
+                    AnswerFeedbackText(message: responseMessage, detail: correctLine,
+                                       alsoSaying: hintAnnouncement)
                         .padding()
                         .transition(.answerFeedback)
                 }
 
+                ExplanationCards(hint: hint, solution: solution, place: .aboveSubmitRow)
+
+                if solution != nil {
+                    NextQuestionButton(action: nextQuestion)
+                        .questionSubmitRow()
+                } else {
                 HStack{
                     Button {
                         hideKeyboard()
@@ -4190,6 +4368,7 @@ struct Year2DivisionView: View {
                     } label: {
                         Text("Enter ")
                             .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
+                            .movesAtOnce(whenMessageAppears: showMessage)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
@@ -4206,7 +4385,7 @@ struct Year2DivisionView: View {
                                 
                                 AdManager.shared.showRewardedInterstitialAd(from: rootVC) {
                                     guard progress.recordSkip() else { return }
-                                    gameData.skipQuestion(resetQuestion: resetQuestion)
+                                    showSolution()
                                 }
                             }
                         } label: {
@@ -4219,6 +4398,9 @@ struct Year2DivisionView: View {
                     }
                 }
                 .questionSubmitRow()
+                }
+
+                ExplanationCards(hint: hint, solution: solution, place: .belowSubmitRow)
             }
             .compactWhileTyping($isCompact)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
@@ -4238,6 +4420,7 @@ struct Year2DivisionView: View {
         case .correct:
             guard progress.recordCorrectAnswer() else { return }
             responseMessage = "Correct!"
+            hint = nil
             showFeedback()
             gameData.points += 1
             gameData.totalQuestionsAnswered += 1
@@ -4248,6 +4431,7 @@ struct Year2DivisionView: View {
             }
         case .incorrect:
             responseMessage = "Incorrect. Try Again!"
+            hint = current.hint(after: answerString)
             sfxPlayer.playSound(named: "wrong", volume:gameData.sfxvolume)
             showFeedback()
             progress.recordWrongAttempt()
@@ -4257,7 +4441,32 @@ struct Year2DivisionView: View {
         current = Year2DivisionQuestion.random()
         answerString = ""
         responseMessage = ""
+        hint = nil
+        solution = nil
         progress.reset()
+    }
+
+    /// The line under "Correct!". See `AnswerFeedbackText`.
+    private var correctLine: SpokenText? {
+        responseMessage == "Correct!" ? current.correctLine : nil
+    }
+
+    /// The hint, read with "Incorrect. Try Again!". See `AnswerFeedbackText`.
+    private var hintAnnouncement: String? {
+        responseMessage == "Incorrect. Try Again!" ? hint.map { "Hint: \($0.spoken)" } : nil
+    }
+
+    /// After a rewarded Skip: the question stays, worked out, until Next Question. No point is given.
+    private func showSolution() {
+        hideKeyboard()
+        hint = nil
+        solution = current.workedSolution
+    }
+
+    /// Next Question, once only: a second tap finds no solution showing.
+    private func nextQuestion() {
+        guard solution != nil else { return }
+        resetQuestion()
     }
     private func showFeedback() {
         // Not animated, so that the question can scroll Enter back into view. See `QuestionLayout`.
@@ -6601,6 +6810,10 @@ struct Year4GeometryView: View {
     /// Whether the shape is beside the answer box and the gaps are smaller, because the question doesn't fit above the
     /// keyboard with the shape above it. See `compactWhileTyping(_:allowed:)`.
     @State private var isCompact = false
+    /// Stage 9C: the hint after a counted wrong answer, until the question changes.
+    @State private var hint: SpokenText?
+    /// Stage 9C: the worked solution after Skip, until Next Question.
+    @State private var solution: WorkedSolution?
 
     var body: some View {
         ZStack {
@@ -6669,6 +6882,7 @@ struct Year4GeometryView: View {
                                 checkAnswer()
                                 hideKeyboard()
                             }
+                            .answeredBySolution(solution != nil)
 
                         if current.question == 1 {
                             Picker("Pick a unit", selection: $userUnit) {
@@ -6688,6 +6902,7 @@ struct Year4GeometryView: View {
                             .colorSchemeForBackground()
                             .frame(width: Metrics.contentWidth * 0.2,
                                    height: Metrics.contentWidth * 0.3)
+                            .answeredBySolution(solution != nil)
                         } else if current.question == 2 && current.shapeType == 4 {
                             Picker("Pick a unit", selection: $userUnit) {
                                 Text("Unit")
@@ -6705,16 +6920,24 @@ struct Year4GeometryView: View {
                             .colorSchemeForBackground()
                             .frame(width: Metrics.contentWidth * 0.2,
                                    height: Metrics.contentWidth * 0.3)
+                            .answeredBySolution(solution != nil)
                         }
                     }
                 }
 
                 if showMessage {
-                    AnswerFeedbackText(message: responseMessage)
+                    AnswerFeedbackText(message: responseMessage, detail: correctLine,
+                                       alsoSaying: hintAnnouncement)
                         .padding()
                         .transition(.answerFeedback)
                 }
 
+                ExplanationCards(hint: hint, solution: solution, place: .aboveSubmitRow)
+
+                if solution != nil {
+                    NextQuestionButton(action: nextQuestion)
+                        .questionSubmitRow()
+                } else {
                 HStack{
                     Button {
                         hideKeyboard()
@@ -6722,6 +6945,7 @@ struct Year4GeometryView: View {
                     } label: {
                         Text("Enter ")
                             .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
+                            .movesAtOnce(whenMessageAppears: showMessage)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
@@ -6739,7 +6963,7 @@ struct Year4GeometryView: View {
                                 
                                 AdManager.shared.showRewardedInterstitialAd(from: rootVC) {
                                     guard progress.recordSkip() else { return }
-                                    gameData.skipQuestion(resetQuestion: resetQuestion)
+                                    showSolution()
                                 }
                             }
                         } label: {
@@ -6752,6 +6976,9 @@ struct Year4GeometryView: View {
                     }
                 }
                 .questionSubmitRow()
+                }
+
+                ExplanationCards(hint: hint, solution: solution, place: .belowSubmitRow)
             }
             // The angle question fits above the keyboard on every iPhone as it is.
             .compactWhileTyping($isCompact, allowed: current.question != 3)
@@ -6795,6 +7022,7 @@ struct Year4GeometryView: View {
         case .correct:
             guard progress.recordCorrectAnswer() else { return }
             responseMessage = "Correct!"
+            hint = nil
             gameData.points += 1
             gameData.totalQuestionsAnswered += 1
             gameData.saveData()
@@ -6803,11 +7031,13 @@ struct Year4GeometryView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { resetQuestion() }
         case .wrongUnit:
             responseMessage = "Correct number, but wrong unit!"
+            hint = current.hint(after: (answer: answerString, unit: userUnit))
             sfxPlayer.playSound(named: "wrong", volume: gameData.sfxvolume)
             showFeedback()
             progress.recordWrongAttempt()
         case .incorrect:
             responseMessage = "Incorrect. Try Again!"
+            hint = current.hint(after: (answer: answerString, unit: userUnit))
             sfxPlayer.playSound(named: "wrong", volume: gameData.sfxvolume)
             showFeedback()
             progress.recordWrongAttempt()
@@ -6820,7 +7050,33 @@ struct Year4GeometryView: View {
         userUnit = ""
         responseMessage = ""
         showMessage = false
+        hint = nil
+        solution = nil
         progress.reset()
+    }
+
+    /// The line under "Correct!". See `AnswerFeedbackText`.
+    private var correctLine: SpokenText? {
+        responseMessage == "Correct!" ? current.correctLine : nil
+    }
+
+    /// The hint, read with "Incorrect. Try Again!" or "Correct number, but wrong unit!". See `AnswerFeedbackText`.
+    private var hintAnnouncement: String? {
+        responseMessage == "Incorrect. Try Again!" || responseMessage == "Correct number, but wrong unit!"
+            ? hint.map { "Hint: \($0.spoken)" } : nil
+    }
+
+    /// After a rewarded Skip: the question stays, worked out, until Next Question. No point is given.
+    private func showSolution() {
+        hideKeyboard()
+        hint = nil
+        solution = current.workedSolution
+    }
+
+    /// Next Question, once only: a second tap finds no solution showing.
+    private func nextQuestion() {
+        guard solution != nil else { return }
+        resetQuestion()
     }
     
     private func showFeedback() {
@@ -9177,6 +9433,10 @@ struct Year6RatiosView: View {
     @State private var showMessage = false
     @State private var isSidebarOpen: Bool = false
     @State private var progress = QuestionProgress()
+    /// Stage 9C: the hint after a counted wrong answer, until the question changes.
+    @State private var hint: SpokenText?
+    /// Stage 9C: the worked solution after Skip, until Next Question.
+    @State private var solution: WorkedSolution?
 
     var body: some View {
         ZStack {
@@ -9209,6 +9469,7 @@ struct Year6RatiosView: View {
                                 checkAnswer()
                                 hideKeyboard()
                             }
+                            .answeredBySolution(solution != nil)
 
                         Text(":")
                             .font(.system(size: Metrics.contentWidth * 0.05))
@@ -9230,6 +9491,7 @@ struct Year6RatiosView: View {
                                 checkAnswer()
                                 hideKeyboard()
                             }
+                            .answeredBySolution(solution != nil)
                     }
                 } else {
                     TextField(answerBox: "Answer", text: $answerString)
@@ -9245,14 +9507,22 @@ struct Year6RatiosView: View {
                             checkAnswer()
                             hideKeyboard()
                         }
+                        .answeredBySolution(solution != nil)
                 }
 
                 if showMessage {
-                    AnswerFeedbackText(message: responseMessage)
+                    AnswerFeedbackText(message: responseMessage, detail: correctLine,
+                                       alsoSaying: hintAnnouncement)
                         .padding()
                         .transition(.answerFeedback)
                 }
 
+                ExplanationCards(hint: hint, solution: solution, place: .aboveSubmitRow)
+
+                if solution != nil {
+                    NextQuestionButton(action: nextQuestion)
+                        .questionSubmitRow()
+                } else {
                 HStack{
                     Button {
                         hideKeyboard()
@@ -9260,6 +9530,7 @@ struct Year6RatiosView: View {
                     } label: {
                         Text("Enter ")
                             .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
+                            .movesAtOnce(whenMessageAppears: showMessage)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
@@ -9276,7 +9547,7 @@ struct Year6RatiosView: View {
 
                                 AdManager.shared.showRewardedInterstitialAd(from: rootVC) {
                                     guard progress.recordSkip() else { return }
-                                    gameData.skipQuestion(resetQuestion: resetQuestion)
+                                    showSolution()
                                 }
                             }
                         } label: {
@@ -9289,6 +9560,9 @@ struct Year6RatiosView: View {
                     }
                 }
                 .questionSubmitRow()
+                }
+
+                ExplanationCards(hint: hint, solution: solution, place: .belowSubmitRow)
 
                 WorkingOutView(canvasView: $canvasView)
             }
@@ -9305,7 +9579,32 @@ struct Year6RatiosView: View {
         answerRatio2 = ""
         responseMessage = ""
         canvasView.drawing = PKDrawing()
+        hint = nil
+        solution = nil
         progress.reset()
+    }
+
+    /// The line under "Correct!". See `AnswerFeedbackText`.
+    private var correctLine: SpokenText? {
+        responseMessage == "Correct!" ? current.correctLine : nil
+    }
+
+    /// The hint, read with "Incorrect. Try Again!". See `AnswerFeedbackText`.
+    private var hintAnnouncement: String? {
+        responseMessage == "Incorrect. Try Again!" ? hint.map { "Hint: \($0.spoken)" } : nil
+    }
+
+    /// After a rewarded Skip: the question stays, worked out, until Next Question. No point is given.
+    private func showSolution() {
+        hideKeyboard()
+        hint = nil
+        solution = current.workedSolution
+    }
+
+    /// Next Question, once only: a second tap finds no solution showing.
+    private func nextQuestion() {
+        guard solution != nil else { return }
+        resetQuestion()
     }
 
     private func checkAnswer() {
@@ -9319,6 +9618,7 @@ struct Year6RatiosView: View {
         case .correct:
             guard progress.recordCorrectAnswer() else { return }
             responseMessage = "Correct!"
+            hint = nil
             gameData.points += 1
             gameData.totalQuestionsAnswered += 1
             gameData.saveData()
@@ -9330,6 +9630,7 @@ struct Year6RatiosView: View {
             }
         case .incorrect:
             responseMessage = "Incorrect. Try Again!"
+            hint = current.hint(after: (first: answerRatio1, second: answerRatio2, missing: answerString))
             sfxPlayer.playSound(named: "wrong", volume: gameData.sfxvolume)
             showFeedback()
             progress.recordWrongAttempt()

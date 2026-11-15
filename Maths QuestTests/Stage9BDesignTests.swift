@@ -696,6 +696,9 @@ struct Stage9BSourceTests {
     /// The activities with a working-out pad hid their question when the keyboard came up (D9). The question scrolls
     /// the row with Enter up to the keyboard, and the pad was above that row, so it pushed the question off the top.
     /// Each pad is now below the row, where the keyboard can cover it instead.
+    ///
+    /// Updated deliberately in Stage 9C: after Skip, Year 6 Ratio's Next Question takes the place of the row with Enter
+    /// and is marked as the row instead, so Ratio has two rows, one for each case. The pad must be below both.
     @Test func everyWorkingOutPadIsBelowEnter() throws {
         let activities = ["Year3FractionsView", "Year3MeasurementView", "Year3TimeView", "Year4DecimalsView",
                           "Year4MoneyView", "Year5PercentagesView", "Year5StatisticsView", "Year5VolumeView",
@@ -703,8 +706,9 @@ struct Stage9BSourceTests {
         for activity in activities {
             let body = try Stage9BSource.view(activity)
             #expect(Stage9BSource.count("WorkingOutView(", in: body) == 1, "\(activity)")
-            #expect(Stage9BSource.count(".questionSubmitRow()", in: body) == 1, "\(activity)")
-            let row = try #require(body.range(of: ".questionSubmitRow()"), "\(activity)")
+            let rows = activity == "Year6RatiosView" ? 2 : 1
+            #expect(Stage9BSource.count(".questionSubmitRow()", in: body) == rows, "\(activity)")
+            let row = try #require(body.range(of: ".questionSubmitRow()", options: .backwards), "\(activity)")
             let pad = try #require(body.range(of: "WorkingOutView("), "\(activity)")
             #expect(row.upperBound <= pad.lowerBound, "\(activity)")
         }

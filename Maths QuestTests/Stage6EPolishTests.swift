@@ -756,6 +756,9 @@ struct Stage6ELayoutWiringTests {
     /// the pad, not the row with Enter. Scrolling to the end, as iOS 18 and later did, would pass the row and on a
     /// small screen hide the top of the question, so every version now scrolls to the row itself once the message is
     /// in. Every other check is unchanged.
+    ///
+    /// Updated deliberately in Stage 9C: the modifier is also told whether to bring a card below the row (the hint)
+    /// into view, so its call now goes on past `scroller:`. It still scrolls to the row first.
     @Test func probabilityKeepsItsQuestionAnswerAndFeedbackOnScreen() throws {
         let probability = try Stage6ESource.body(of: "Year6ProbabilityView")
         #expect(probability.contains("WorkingOutView(canvasView: $canvasView, padHeight: padHeight)"))
@@ -764,7 +767,7 @@ struct Stage6ELayoutWiringTests {
         let feedback = try Stage6ESource.declaration(startingWith: "\nstruct AnswerFeedbackText: View {")
         #expect(feedback.contains("revealSubmitRow()"))
         let layout = try Stage6ESource.declaration(startingWith: "\nstruct QuestionLayout<Content: View>: View {")
-        #expect(layout.contains(".modifier(RevealSubmitRowByScrolling(scroller: scroller))"))
+        #expect(layout.contains(".modifier(RevealSubmitRowByScrolling(scroller: scroller,"))
         // The scroll waits until the message is in the question, so it isn't stopped at the question's old height.
         let reveal = try Stage6ESource.declaration(startingWith: "\nprivate struct RevealSubmitRowByScrolling: ViewModifier {")
         #expect(reveal.contains(".environment(\\.revealSubmitRow, RevealSubmitRow {"))

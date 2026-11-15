@@ -1168,14 +1168,29 @@ struct Stage4AViewWiringTests {
         #expect(Stage4ASource.block(startingWith: "private func resetQuestion() {", in: body).first?.contains("progress.reset()") == true)
     }
 
+    /// The four activities that show a worked solution after Skip (Stage 9C Batch 1).
+    static let workedSolutionViews: Set = ["Year2MultiplicationView", "Year2DivisionView", "Year4GeometryView",
+                                           "Year6RatiosView"]
+
     /// The Skip reward is turned down unless the question can still be skipped.
+    ///
+    /// Updated deliberately in Stage 9C: in the four activities with worked solutions, the reward shows the solution
+    /// (`showSolution()`) and Next Question moves on, instead of `gameData.skipQuestion(resetQuestion:)`. The reward is
+    /// still recorded once, behind the same guard. The other 14 activities are checked as before.
     @Test(arguments: Stage4ASource.activityViews)
     func skipRewardIsRecordedBeforeMovingOn(view: String) throws {
         let lines = Stage4ASource.lines(of: try Stage4ASource.body(of: view, in: Stage4ASource.source()))
-        let skips = lines.indices.filter { lines[$0].hasPrefix("gameData.skipQuestion(") }
+        let showsSolution = Self.workedSolutionViews.contains(view)
+        let skips = lines.indices.filter {
+            showsSolution ? lines[$0] == "showSolution()" : lines[$0].hasPrefix("gameData.skipQuestion(")
+        }
         #expect(skips.count == 1)
         for index in skips {
             #expect(lines[index - 1] == "guard progress.recordSkip() else { return }")
+        }
+        #expect(lines.filter { $0.contains("recordSkip()") }.count == 1)
+        if showsSolution {
+            #expect(!lines.contains { $0.contains("skipQuestion(") })
         }
     }
 
@@ -1223,6 +1238,11 @@ struct Stage4AViewWiringTests {
 
     /// The next question comes only from the reset scheduled by a score, from Skip, or from an
     /// .onAppear that first checks the question isn't already moving on.
+    ///
+    /// Updated deliberately in Stage 9C: in the four activities with worked solutions, the question after a Skip comes
+    /// from Next Question instead of `gameData.skipQuestion(resetQuestion:)`. Next Question is the only caller of
+    /// `nextQuestion()`, which moves on only while a solution is showing, and `resetQuestion()` clears the solution, so
+    /// a second tap does nothing. Every other check is unchanged.
     @Test(arguments: Stage4ASource.activityViews)
     func nextQuestionComesOncePerScoreOrSkip(view: String) throws {
         let body = try Stage4ASource.body(of: view, in: Stage4ASource.source())
@@ -1239,7 +1259,21 @@ struct Stage4AViewWiringTests {
             #expect(guardLine != nil && resetLine != nil && guardLine! < resetLine!, "\(view) .onAppear")
             onAppearResets += Stage4ASource.count("resetQuestion()", in: block)
         }
-        #expect(calls == scheduledResets + onAppearResets)
-        #expect(Stage4ASource.count("skipQuestion(resetQuestion: resetQuestion)", in: body) == 1)
+        guard Self.workedSolutionViews.contains(view) else {
+            #expect(calls == scheduledResets + onAppearResets)
+            #expect(Stage4ASource.count("skipQuestion(resetQuestion: resetQuestion)", in: body) == 1)
+            return
+        }
+        #expect(Stage4ASource.count("skipQuestion(", in: body) == 0)
+        let next = try #require(Stage4ASource.block(startingWith: "private func nextQuestion() {", in: body).first)
+        #expect(Stage4ASource.lines(of: next) == ["private func nextQuestion() {", "guard solution != nil else { return }",
+                                                  "resetQuestion()", "}"])
+        #expect(Stage4ASource.count("nextQuestion", in: body) == 2, "declared once, and Next Question's action")
+        #expect(body.contains("NextQuestionButton(action: nextQuestion)"))
+        let reset = try #require(Stage4ASource.block(startingWith: "private func resetQuestion() {", in: body).first)
+        #expect(reset.contains("solution = nil"))
+        let show = try #require(Stage4ASource.block(startingWith: "private func showSolution() {", in: body).first)
+        #expect(!show.contains("resetQuestion()"))
+        #expect(calls == scheduledResets + onAppearResets + 1)
     }
 }

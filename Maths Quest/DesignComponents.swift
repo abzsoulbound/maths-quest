@@ -222,6 +222,238 @@ struct StatusBanner: View {
     }
 }
 
+/// Stage 9C: a hint after a counted wrong answer, on a card under Enter and Skip. It stays until the question
+/// changes, so the child can read it while they try again. A lightbulb and the word "Hint" mark it, so the amber is
+/// never the only sign. It doesn't read itself out: the message after Enter reads the hint with it, in one
+/// announcement (see `AnswerFeedbackText`). VoiceOver finds it as one item, "Hint: …".
+struct HintCard: View {
+    let hint: SpokenText
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// The system's orange, made dark or light enough to read as words on the card.
+    static let accent = Contrast.SystemColour(light: Contrast.RGB(bytes: 255, 149, 0),
+                                              dark: Contrast.RGB(bytes: 255, 159, 10))
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label {
+                Text("Hint")
+                    .fontWeight(.bold)
+            } icon: {
+                Image(systemName: "lightbulb.fill")
+            }
+            .foregroundStyle(Color(CardColour.readable(Self.accent, minimum: 4.5, in: colorScheme)))
+            Text(hint.text)
+                .foregroundStyle(.cardWords)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .scaledFont(size: 18, maximum: 28)
+        .fontWeight(.semibold)
+        .multilineTextAlignment(.leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .card()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Hint: \(hint.spoken)")
+        .accessibilityAddTraits(.isStaticText)
+        .accessibilityIdentifier("HintCard")
+    }
+}
+
+/// Stage 9C: the question worked out after Skip, on a card under the answer box: "How to work it out", a few numbered
+/// steps, then the answer. Once nothing covers the screen, such as the rewarded ad, VoiceOver moves to the heading, so
+/// it reads the solution rather than staying on the Skip button that has gone. Each step is its own item for VoiceOver.
+struct WorkedSolutionCard: View {
+    let solution: WorkedSolution
+    @AccessibilityFocusState private var isHeadingFocused: Bool
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.revealSubmitRow) private var revealSubmitRow
+
+    /// The system's indigo, made dark or light enough to read as words on the card.
+    static let accent = Contrast.SystemColour(light: Contrast.RGB(bytes: 88, 86, 214),
+                                              dark: Contrast.RGB(bytes: 94, 92, 230))
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label {
+                Text("How to work it out")
+                    .fontWeight(.bold)
+            } icon: {
+                Image(systemName: "list.number")
+            }
+            .foregroundStyle(Color(CardColour.readable(Self.accent, minimum: 4.5, in: colorScheme)))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("How to work it out")
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("WorkedSolutionHeading")
+            .accessibilityFocused($isHeadingFocused)
+
+            ForEach(solution.steps.indices, id: \.self) { index in
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("\(index + 1).")
+                        .fontWeight(.bold)
+                    Text(solution.steps[index].text)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .foregroundStyle(.cardWords)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Step \(index + 1): \(solution.steps[index].spoken)")
+                .accessibilityIdentifier("WorkedSolutionStep\(index + 1)")
+            }
+
+            Text(solution.answer.text)
+                .fontWeight(.bold)
+                .foregroundStyle(.cardWords)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel(solution.answer.spoken)
+                .accessibilityIdentifier("WorkedSolutionAnswer")
+        }
+        .scaledFont(size: 18, maximum: 28)
+        .fontWeight(.semibold)
+        .multilineTextAlignment(.leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .card()
+        .accessibilityElement(children: .contain)
+        .onAppear {
+            // Next Question, just below the card, is scrolled into view, and with it the card.
+            revealSubmitRow()
+            whenNothingCoversTheScreen {
+                isHeadingFocused = true
+            }
+        }
+    }
+}
+
+/// Stage 9C: the button under a worked solution that brings the next question. It looks like Enter, which it
+/// replaces, and is never smaller than 44 points. It acts on the first tap only: the view's own check stops a second
+/// question being skipped to as well (see `QuestionProgress`).
+struct NextQuestionButton: View {
+    let action: () -> Void
+    @State private var isDone = false
+
+    var body: some View {
+        Button {
+            guard !isDone else { return }
+            isDone = true
+            action()
+        } label: {
+            Text("Next Question")
+                .scaledFont(size: Metrics.contentWidth * 0.075, maximum: max(Metrics.contentWidth * 0.075, 40))
+                .fontWeight(.bold)
+                .foregroundStyle(.black)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 12)
+                .frame(minHeight: Metrics.minimumTapSize)
+                .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
+        }
+        .disabled(isDone)
+        .accessibilityIdentifier("NextQuestionButton")
+        .padding()
+    }
+}
+
+/// Stage 9C: the question's card, if it has one: the worked solution after Skip, or else the hint after a counted
+/// wrong answer. Never both: Skip clears the hint. Each fades in, as the message does, but goes at once
+/// (`AnyTransition.explanationCard`). An activity puts this in twice, either side of the row with Enter and Skip
+/// (`questionSubmitRow()`), and each place shows its own card:
+/// - `.aboveSubmitRow`: the worked solution, between the answer box and Next Question, which takes the row's place.
+///   The answer box can't be used then, so the keyboard can't come up.
+/// - `.belowSubmitRow`: the hint, under Enter and Skip. The player types again with the hint showing, and
+///   `QuestionLayout` keeps the question, the answer box and Enter above the keyboard, as it does without a hint.
+///   The keyboard may cover the hint then, as it may the working-out pad. Between the answer box and Enter, the hint
+///   pushed the question, or with the largest text on an iPhone SE the answer box itself, off the top of the screen.
+///   While the keyboard is down, the question scrolls to bring the hint into view with the row (`cardBelowSubmitRow()`).
+struct ExplanationCards: View {
+    enum Place {
+        case aboveSubmitRow
+        case belowSubmitRow
+    }
+
+    let hint: SpokenText?
+    let solution: WorkedSolution?
+    let place: Place
+
+    var body: some View {
+        switch place {
+        case .aboveSubmitRow:
+            if let solution {
+                WorkedSolutionCard(solution: solution)
+                    .padding(.horizontal)
+                    .transition(.explanationCard)
+            }
+        case .belowSubmitRow:
+            if solution == nil, let hint {
+                HintCard(hint: hint)
+                    .padding(.horizontal)
+                    .transition(.explanationCard)
+                    .cardBelowSubmitRow()
+            }
+        }
+    }
+}
+
+extension AnyTransition {
+    /// Stage 9C: a hint or worked solution fades in, as the message does, but goes at once. Faded out, it stayed where
+    /// it was for a moment while the row with Enter, or the next question, moved over it: a correct answer clears the
+    /// hint, and Next Question the worked solution.
+    static var explanationCard: AnyTransition {
+        .asymmetric(insertion: .answerFeedback, removal: .identity)
+    }
+}
+
+extension View {
+    /// Stage 9C: goes on Enter's label, so that Enter moves down at once with the rest of the question when the message
+    /// appears above it. The system's button style animates Enter by itself as the tap ends and Enter is disabled,
+    /// in the same update that shows the message, while everything else moves at once. Enter then slid down over
+    /// the message for a moment, over its second line after "Correct!" or over all of it with a hint showing. Only
+    /// that update: when the message goes, Enter moves back up with everything else, as before.
+    func movesAtOnce(whenMessageAppears isMessageShowing: Bool) -> some View {
+        transaction(value: isMessageShowing) { transaction in
+            if isMessageShowing {
+                transaction.animation = nil
+            }
+        }
+    }
+}
+
+extension View {
+    /// Stage 9C: an answer box once its question has been worked out after Skip. The last answer typed stays, faded,
+    /// and can't be changed: Next Question brings a new question with an empty box. VoiceOver reads it as dimmed.
+    func answeredBySolution(_ isAnswered: Bool) -> some View {
+        disabled(isAnswered)
+            .opacity(isAnswered ? 0.6 : 1)
+    }
+}
+
+/// Runs `action` once nothing is shown over the app's screen, such as a rewarded ad or the alert asking whether to
+/// watch one, or straight away if nothing is. Only while VoiceOver is on, as moving its focus is all this is for. It
+/// checks four times a second for up to two minutes, then gives up.
+@MainActor
+func whenNothingCoversTheScreen(within limit: TimeInterval = 120, _ action: @escaping () -> Void) {
+    guard UIAccessibility.isVoiceOverRunning else { return }
+    let deadline = Date().addingTimeInterval(limit)
+
+    func check() {
+        let root = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first?.windows.first?.rootViewController
+        let isCovered = root?.presentedViewController != nil
+        if !isCovered && UIApplication.shared.applicationState == .active {
+            action()
+        } else if Date() < deadline {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { check() }
+        }
+    }
+
+    // A moment for the card to be laid out, so VoiceOver has something to move to.
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { check() }
+}
+
 /// A button with white words on a filled, rounded box: blue for Enter, green to buy and grey for the rest, each dark
 /// enough for white words at 4.5:1. The whole box can be tapped, and it's never smaller than 44 points.
 struct FilledButtonStyle: ButtonStyle {
