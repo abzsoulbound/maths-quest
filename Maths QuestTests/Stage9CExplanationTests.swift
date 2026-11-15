@@ -769,9 +769,9 @@ struct Stage9CGeometryExplanationTests {
                 angleHints += 1
             }
         }
-        // 9 tries each: 8 are wrong for an acute or obtuse angle, and 7 for the right angle ("right" and "Right angle"
-        // are both right).
-        #expect(angleHints == 66 * 8 + 7 + 66 * 8)
+        // 9 tries each: 8 are wrong for an acute or obtuse angle, and 6 for the right angle ("right", "Right angle"
+        // and "a right angle" are all right). Batch FB-B deliberately made "a right angle" right: it was 7 before.
+        #expect(angleHints == 66 * 8 + 6 + 66 * 8)
         #expect(!angleHint.text.lowercased().contains("acute") && !angleHint.text.lowercased().contains("obtuse"))
         checkWording(angleHint, maximumSentences: 2)
     }

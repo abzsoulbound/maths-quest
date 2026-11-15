@@ -4547,7 +4547,7 @@ struct Year2ShapeQuestion: Equatable {
     }
 
     /// Numbers are read as numbers. Names ignore capitals and spaces, as before, and punctuation at either end,
-    /// so "Square." is right.
+    /// so "Square." is right, and so is "a square" (batch FB-B).
     func evaluate(_ text: String) -> Outcome {
         guard !TypedAnswer.isBlank(text) else { return .unanswered }
         switch kind {
@@ -4556,9 +4556,20 @@ struct Year2ShapeQuestion: Equatable {
         case .corners:
             return TypedAnswer.wholeNumber(text) == figure.corners ? .correct : .incorrect
         case .name:
-            let name = text.trimmingCharacters(in: .punctuationCharacters.union(.whitespacesAndNewlines))
-            return name.lowercased().replacingOccurrences(of: " ", with: "") == figure.name ? .correct : .incorrect
+            return Self.typedName(text) == figure.name ? .correct : .incorrect
         }
+    }
+
+    /// A typed name as it is compared: without punctuation at either end, a leading "a" or "an", capitals or spaces.
+    static func typedName(_ text: String) -> String {
+        let name = text.trimmingCharacters(in: .punctuationCharacters.union(.whitespacesAndNewlines)).lowercased()
+        return AnswerFormat.withoutArticle(name.split(separator: " ").map(String.init)).joined()
+    }
+
+    /// "Diamond" or "rhombus" for the square, which is drawn standing on a corner. It is still a square, so this is
+    /// asked for again with a nudge to turn it rather than marked (batch FB-B); `evaluate` still calls it incorrect.
+    func asksAgainAboutTheTurnedSquare(_ text: String) -> Bool {
+        kind == .name && figure.name == "square" && ["diamond", "rhombus"].contains(Self.typedName(text))
     }
 
     // MARK: VoiceOver
@@ -4747,6 +4758,14 @@ struct Year2ShapesView: View {
     private func checkAnswer() {
         // Enter and Return are ignored once the question has been answered or skipped.
         guard !progress.isAdvancing else { return }
+
+        // Like a blank answer, "diamond" for the turned square is asked for again: no score, and no count towards
+        // Skip. Batch FB-B.
+        guard !current.asksAgainAboutTheTurnedSquare(answerString) else {
+            responseMessage = AnswerFormat.turnedSquare
+            showFeedback()
+            return
+        }
 
         switch current.evaluate(answerString) {
         case .unanswered:
@@ -4967,6 +4986,20 @@ struct Year3FractionsView: View {
             responseMessage = "Please enter an answer!"
             showFeedback()
             return
+        }
+
+        // So are "1/2" typed into one box and a fraction with one box left empty. Batch FB-B.
+        if question == 1 {
+            if AnswerFormat.hasTwoNumbersInOneBox(numeratorString, denominatorString) {
+                responseMessage = AnswerFormat.oneNumberPerBox
+                showFeedback()
+                return
+            }
+            if AnswerFormat.isOneBoxEmpty(numeratorString, denominatorString) {
+                responseMessage = AnswerFormat.fillInBothBoxes
+                showFeedback()
+                return
+            }
         }
 
         let isCorrect: Bool
@@ -5313,7 +5346,12 @@ struct Year3MeasurementView: View {
             responseMessage = "Please enter an answer!"
             showFeedback()
         case .notANumber:
-            responseMessage = "Please enter a valid number!"
+            // "24cm" gets its own message. Batch FB-B.
+            if AnswerFormat.isNumberWithUnit(answerString) {
+                responseMessage = current.kind == .convert ? AnswerFormat.numberThenUnit : AnswerFormat.justTheNumber
+            } else {
+                responseMessage = "Please enter a valid number!"
+            }
             showFeedback()
         case .ambiguousComma:
             responseMessage = "Write it without a comma."
@@ -5661,6 +5699,18 @@ struct Year3TimeQuestion: Equatable {
             if TypedAnswer.isBlank(hours) && TypedAnswer.isBlank(minutes) { return .unanswered }
             return ClockMaths.isCorrectReading(hours: hours, minutes: minutes, hour24: hour, minute: minute)
                 ? .correct : .incorrect
+        }
+    }
+
+    /// "3" and nothing, or nothing and "30", where the time needs both boxes. It may mean 3 o'clock or be unfinished,
+    /// so it is asked for again rather than marked (batch FB-B). `evaluate` still calls it incorrect. "2 hours and"
+    /// with no minutes is still an answer when changing minutes into hours and minutes.
+    func needsBothBoxes(hours: String, minutes: String) -> Bool {
+        switch kind {
+        case .timeAfter, .readClock:
+            return AnswerFormat.isOneBoxEmpty(hours, minutes)
+        case .toMinutes, .toHoursAndMinutes, .setClock:
+            return false
         }
     }
 }
@@ -6074,6 +6124,13 @@ struct Year3TimeView: View {
     private func checkAnswer() {
         // Enter and Return are ignored once the question has been answered or skipped.
         guard !progress.isAdvancing else { return }
+
+        // Like a blank answer, one box left empty is asked for again: no score, and no count towards Skip. Batch FB-B.
+        guard !current.needsBothBoxes(hours: hoursanswer, minutes: minutesanswer) else {
+            responseMessage = AnswerFormat.fillInBothBoxes
+            showFeedback()
+            return
+        }
 
         switch current.evaluate(hours: hoursanswer, minutes: minutesanswer,
                                 clockHour: clockHour, clockMinute: clockMinute) {
@@ -6790,11 +6847,19 @@ struct Year4GeometryQuestion: Equatable {
             .trimmingCharacters(in: CharacterSet(charactersIn: ".!").union(.whitespacesAndNewlines))
             .split(separator: " ")
             .map(String.init)
+        // "a right angle" and "an obtuse angle" are names too. Batch FB-B.
+        words = AnswerFormat.withoutArticle(words)
         if words.count == 2, words[1] == "angle" || words[1] == "angled" {
             words.removeLast()
         }
         guard words.count == 1, ["acute", "right", "obtuse"].contains(words[0]) else { return nil }
         return words[0]
+    }
+
+    /// "24cm" or "28 cm²" for a perimeter or an area, whose unit has its own wheel. It is asked for again without the
+    /// unit rather than marked (batch FB-B); `evaluate` still calls it incorrect.
+    func hasUnitTypedIn(answer: String) -> Bool {
+        (question == 1 || question == 2) && AnswerFormat.isNumberWithUnit(answer)
     }
 
     /// Nothing typed is unanswered. Numbers are digits only, as everywhere else, so "+12" isn't 12.
@@ -7032,6 +7097,13 @@ struct Year4GeometryView: View {
     private func checkAnswer() {
         // Enter and Return are ignored once the question has been answered or skipped.
         guard !progress.isAdvancing else { return }
+
+        // Like a blank answer, "24cm" is asked for again: no score, no hint, and no count towards Skip. Batch FB-B.
+        guard !current.hasUnitTypedIn(answer: answerString) else {
+            responseMessage = AnswerFormat.numberThenUnit
+            showFeedback()
+            return
+        }
 
         switch current.evaluate(answer: answerString, unit: userUnit) {
         case .unanswered:
@@ -7984,7 +8056,8 @@ struct Year5StatisticsQuestion: Equatable {
             return TypedAnswer.isNumber(answer, equalTo: mode)
         case .highestBar:
             guard let highestCategory else { return false }
-            return answer.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == highestCategory
+            // "Category B" is B, as VoiceOver reads the bar. Batch FB-B.
+            return AnswerFormat.letter(in: answer, after: "category") == highestCategory
         }
     }
 }
@@ -8294,8 +8367,15 @@ struct Year5VolumeQuestion: Equatable {
             return TypedAnswer.isNumber(answer, equalTo: volume)
         case .comparison:
             guard let glassWithMore else { return false }
-            return answer.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == glassWithMore
+            // "Glass A" is A, as the glass is labelled. Batch FB-B.
+            return AnswerFormat.letter(in: answer, after: "glass") == glassWithMore
         }
+    }
+
+    /// "125cm³" for a cube or cuboid, with "cm³" already written next to the box. It is asked for again without the
+    /// unit rather than marked (batch FB-B); `isCorrect` still says no.
+    func needsJustTheNumber(answer: String) -> Bool {
+        kind != .comparison && AnswerFormat.isNumberWithUnit(answer)
     }
 
     /// "1,000" is one thousand with a thousands comma but 1 with a decimal comma, so a cube or cuboid answer written
@@ -8471,6 +8551,13 @@ struct Year5VolumeView: View {
         // Like a blank answer, "1,000" is asked for again: it scores nothing and doesn't count towards Skip.
         guard !current.needsWritingWithoutAComma(answer: answerString) else {
             responseMessage = "Write it without a comma."
+            showFeedback()
+            return
+        }
+
+        // And so is "125cm³". Batch FB-B.
+        guard !current.needsJustTheNumber(answer: answerString) else {
+            responseMessage = AnswerFormat.justTheNumber
             showFeedback()
             return
         }
@@ -9286,7 +9373,14 @@ struct Year6ProbabilityView: View {
             responseMessage = "Please enter an answer!"
             showFeedback()
         case .invalidInput:
-            responseMessage = "Please enter valid numbers."
+            // "1/2" in one box, and one box left empty, get their own messages. Batch FB-B.
+            if AnswerFormat.hasTwoNumbersInOneBox(numerator, denominator) {
+                responseMessage = AnswerFormat.oneNumberPerBox
+            } else if AnswerFormat.isOneBoxEmpty(numerator, denominator) {
+                responseMessage = AnswerFormat.fillInBothBoxes
+            } else {
+                responseMessage = "Please enter valid numbers."
+            }
             showFeedback()
         case .correct:
             guard progress.recordCorrectAnswer() else { return }
@@ -9449,6 +9543,12 @@ struct Year6RatioQuestion: Equatable {
 
     private static func isBlank(_ text: String) -> Bool {
         text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// "2:3" or "2/3" typed into one of the ratio's two boxes, which an iPad keyboard allows. It is asked for again
+    /// rather than marked (batch FB-B); `evaluate` still calls it incorrect. Missing-value questions have one box.
+    func hasTwoNumbersInOneBox(first: String, second: String) -> Bool {
+        correctRatio != nil && AnswerFormat.hasTwoNumbersInOneBox(first, second)
     }
 }
 
@@ -9641,6 +9741,14 @@ struct Year6RatiosView: View {
     private func checkAnswer() {
         // Enter and Return are ignored once the question has been answered or skipped.
         guard !progress.isAdvancing else { return }
+
+        // Like a blank answer, "2:3" typed into one box is asked for again: no score, no hint, and no count towards
+        // Skip. Batch FB-B.
+        guard !current.hasTwoNumbersInOneBox(first: answerRatio1, second: answerRatio2) else {
+            responseMessage = AnswerFormat.oneNumberPerBox
+            showFeedback()
+            return
+        }
 
         switch current.evaluate(first: answerRatio1, second: answerRatio2, missing: answerString) {
         case .unanswered:

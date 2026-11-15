@@ -140,7 +140,9 @@ struct Year5VolumeQuestionTests {
     }
 
     @Test func comparisonRejectsAnythingThatIsntAOrB() {
-        let rejected = ["", " ", "C", "AB", "BA", "A or B", "B.", "BB", "glass B", "Β", "ｂ",
+        // "glass B" was here until batch FB-B deliberately accepted "Glass A" and "Glass B", as the glasses are
+        // labelled. FeedbackBatchFBBTests checks that "glass C", "glass" and "glass A or B" are still rejected.
+        let rejected = ["", " ", "C", "AB", "BA", "A or B", "B.", "BB", "Β", "ｂ",
                         "2350", "2.35", "1500", "0", "yes", "?", "😀"]
         for question in [glasses(1500, 2350), glasses(2400, 2350)] {
             for answer in rejected {

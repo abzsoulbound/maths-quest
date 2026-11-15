@@ -50,6 +50,12 @@ class MathsQuestUITestCase: XCTestCase {
         "Please enter valid numbers.",
         "Use a decimal point.",
         "Write it without a comma.",
+        // Batch FB-B: answers in the wrong form, asked for again.
+        "Fill in both boxes.",
+        "Put each number in its own box.",
+        "Type just the number, then pick the unit.",
+        "Type just the number.",
+        "Imagine it turned to sit on one side.",
     ]
 
     enum UITestSafetyError: Error {
