@@ -331,8 +331,10 @@ enum Stage4AWiring {
 }
 
 /// One of the six screens, driven the way its view drives it. Enter is .disabled(showMessage),
-/// but Return (TextField.onSubmit) never is. Every message hides itself after
-/// feedbackMilliseconds, even if a later message is showing by then. A correct answer schedules
+/// but Return (TextField.onSubmit) never is. Before Stage 4A every message hid itself after
+/// feedbackMilliseconds, even if a later message was showing by then. Now (feedback batch FB-C)
+/// only the latest message's own timer hides it, and changing the answer hides the message about
+/// the old one at once, except while the question is moving on. A correct answer schedules
 /// resetQuestion() after correctResetMilliseconds, and a Skip reward calls GameData.skipQuestion,
 /// which schedules it a second later. With Remove Ads the reward arrives as soon as Skip is tapped,
 /// otherwise when the ad finishes. The first onAppear is left out, so every screen starts on
@@ -349,7 +351,18 @@ private final class Stage4AScreen {
     /// The state the six views kept before Stage 4A.
     private(set) var oldWrongAttempts = 0
     private(set) var oldShowSkipButton = false
-    var answer = Stage4AAnswer()
+    /// What the child has typed or picked. Changing it runs the view's .onChange.
+    var answer = Stage4AAnswer() {
+        didSet {
+            if answer != oldValue && !isResetting {
+                answerChanged()
+            }
+        }
+    }
+    /// resetQuestion() is running, so .onChange waits until it has finished.
+    private var isResetting = false
+    /// The app's own clock, so that only the latest message's timer hides it (FB-C).
+    private var messageClock = AnswerMessageClock()
     private(set) var message = ""
     private(set) var showMessage = false
     private(set) var points = 0
@@ -522,9 +535,21 @@ private final class Stage4AScreen {
 
     private func showFeedback() {
         showMessage = true
+        let shown = messageClock.show()
         queue.asyncAfter(milliseconds: activity.feedbackMilliseconds) { [unowned self] in
+            if self.wiring == .questionProgress {
+                // A newer message stays for its own full time.
+                guard self.messageClock.isShowing(shown) else { return }
+            }
             self.showMessage = false
         }
+    }
+
+    /// .hidesAnswerMessage(whenChanged:showMessage:isAdvancing:) from FB-C: a changed answer
+    /// hides the message about the old one, so Enter works at once, unless the question is moving on.
+    private func answerChanged() {
+        guard wiring == .questionProgress, showMessage, !progress.isAdvancing else { return }
+        showMessage = false
     }
 
     private func scheduleReset(after milliseconds: Int) {
@@ -542,7 +567,10 @@ private final class Stage4AScreen {
     private func resetQuestion() {
         question = activity.question(using: &generator)
         questionNumber += 1
+        let previousAnswer = answer
+        isResetting = true
         answer = Stage4AAnswer()
+        isResetting = false
         message = ""
         if activity.isGeometry {
             showMessage = false
@@ -550,6 +578,10 @@ private final class Stage4AScreen {
         progress.reset()
         oldWrongAttempts = 0
         oldShowSkipButton = false
+        // .onChange(of: answer) runs once the view has been redrawn, after all of the above.
+        if answer != previousAnswer {
+            answerChanged()
+        }
     }
 }
 
@@ -637,23 +669,30 @@ struct Stage4ATimelineTests {
         #expect(screen.points == 1)
     }
 
-    /// A wrong answer's timer hides "Correct!" early and re-enables Enter before the next question.
+    /// A corrected answer can be entered at once (FB-C), "Correct!" stays for its own full time
+    /// when the wrong answer's timer fires, and nothing during the transition scores again.
     @Test(arguments: Stage4AActivity.allCases)
     func earlierFeedbackTimerCannotReopenScoring(activity: Stage4AActivity) {
         let screen = Stage4AScreen(activity, seed: 0x4A_1003)
         screen.answer = screen.question.wrongAnswers[0]
         screen.tapEnter()
+        #expect(screen.showMessage)
         screen.wait(activity.feedbackMilliseconds - 100)
 
         screen.answer = screen.question.rightAnswer
+        #expect(!screen.showMessage, "Changing the answer hides the message about the old one")
         screen.tapEnter()
-        #expect(screen.points == 0, "Enter is still disabled")
+        #expect(screen.points == 1, "Enter works at once for the corrected answer")
+        #expect(screen.showMessage)
         screen.pressReturn()
+        screen.doubleTapEnter()
         #expect(screen.points == 1)
 
         screen.wait(100)
-        #expect(!screen.showMessage)
+        #expect(screen.showMessage, "The wrong answer's timer doesn't hide \"Correct!\"")
         #expect(screen.questionNumber == 1)
+        screen.answer = screen.question.wrongAnswers[0]
+        #expect(screen.showMessage, "The question is moving on, so the message stays")
         screen.tapEnter()
         screen.pressReturn()
         #expect(screen.points == 1)

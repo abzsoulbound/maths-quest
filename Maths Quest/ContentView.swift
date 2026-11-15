@@ -3562,6 +3562,8 @@ struct Year1CountingView: View {
     @EnvironmentObject var gameData: GameData
     @State private var responseMessage: String = ""
     @State private var showMessage = false
+    /// Lets only the latest message's timer hide it. See `AnswerMessageClock`.
+    @State private var messageClock = AnswerMessageClock()
     @State private var sfxPlayer = SFXPlayer()
     @State private var progress = QuestionProgress()
     /// Whether the rows of numbers and the words are closer together while the player types, because the question
@@ -3661,6 +3663,8 @@ struct Year1CountingView: View {
             .compactWhileTyping($isCompact)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
+        .hidesAnswerMessage(whenChanged: [answerString], showMessage: $showMessage,
+                            isAdvancing: { progress.isAdvancing })
         .navigationBarBackButtonHidden(true)
         .questionScreen()
     }
@@ -3693,7 +3697,10 @@ struct Year1CountingView: View {
     private func showFeedback() {
         // Not animated, so that the question can scroll Enter back into view. See `QuestionLayout`.
         showMessage = true
+        let shown = messageClock.show()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            // A newer message stays for its own full time.
+            guard messageClock.isShowing(shown) else { return }
             withAnimation {
                 showMessage = false
             }
@@ -3716,6 +3723,8 @@ struct Year1AdditionView: View {
     @EnvironmentObject var gameData: GameData
     @State private var responseMessage: String = ""
     @State private var showMessage = false
+    /// Lets only the latest message's timer hide it. See `AnswerMessageClock`.
+    @State private var messageClock = AnswerMessageClock()
     @State private var sfxPlayer = SFXPlayer()
     @State private var progress = QuestionProgress()
     /// Whether the gaps are smaller while the player types, because the question doesn't fit above the keyboard with
@@ -3804,6 +3813,8 @@ struct Year1AdditionView: View {
             .compactWhileTyping($isCompact)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
+        .hidesAnswerMessage(whenChanged: [answerString], showMessage: $showMessage,
+                            isAdvancing: { progress.isAdvancing })
         .navigationBarBackButtonHidden(true)
         .questionScreen()
     }
@@ -3847,7 +3858,10 @@ struct Year1AdditionView: View {
     private func showFeedback() {
         // Not animated, so that the question can scroll Enter back into view. See `QuestionLayout`.
         showMessage = true
+        let shown = messageClock.show()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            // A newer message stays for its own full time.
+            guard messageClock.isShowing(shown) else { return }
             withAnimation {
                 showMessage = false
             }
@@ -3864,6 +3878,8 @@ struct Year1SubtractionView: View {
     @EnvironmentObject var gameData: GameData
     @State private var responseMessage: String = ""
     @State private var showMessage = false
+    /// Lets only the latest message's timer hide it. See `AnswerMessageClock`.
+    @State private var messageClock = AnswerMessageClock()
     @State private var sfxPlayer = SFXPlayer()
     @State private var progress = QuestionProgress()
     /// Whether the gaps are smaller while the player types, because the question doesn't fit above the keyboard with
@@ -3957,6 +3973,8 @@ struct Year1SubtractionView: View {
         .onAppear {
             numberadjustment()
         }
+        .hidesAnswerMessage(whenChanged: [answerString], showMessage: $showMessage,
+                            isAdvancing: { progress.isAdvancing })
         .navigationBarBackButtonHidden(true)
         .questionScreen()
     }
@@ -4006,7 +4024,10 @@ struct Year1SubtractionView: View {
     private func showFeedback() {
         // Not animated, so that the question can scroll Enter back into view. See `QuestionLayout`.
         showMessage = true
+        let shown = messageClock.show()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            // A newer message stays for its own full time.
+            guard messageClock.isShowing(shown) else { return }
             withAnimation {
                 showMessage = false
             }
@@ -4083,6 +4104,8 @@ struct Year2MultiplicationView: View {
     @EnvironmentObject var gameData: GameData
     @State private var responseMessage: String = ""
     @State private var showMessage = false
+    /// Lets only the latest message's timer hide it. See `AnswerMessageClock`.
+    @State private var messageClock = AnswerMessageClock()
     @State private var sfxPlayer = SFXPlayer()
     @State private var progress = QuestionProgress()
     /// Whether the gaps are smaller while the player types, because the question doesn't fit above the keyboard with
@@ -4188,6 +4211,8 @@ struct Year2MultiplicationView: View {
             .compactWhileTyping($isCompact)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
+        .hidesAnswerMessage(whenChanged: [answerString], showMessage: $showMessage,
+                            isAdvancing: { progress.isAdvancing })
         .navigationBarBackButtonHidden(true)
         .questionScreen()
     }
@@ -4256,7 +4281,10 @@ struct Year2MultiplicationView: View {
     private func showFeedback() {
         // Not animated, so that the question can scroll Enter back into view. See `QuestionLayout`.
         showMessage = true
+        let shown = messageClock.show()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            // A newer message stays for its own full time.
+            guard messageClock.isShowing(shown) else { return }
             withAnimation {
                 showMessage = false
             }
@@ -4308,6 +4336,8 @@ struct Year2DivisionView: View {
     @EnvironmentObject var gameData: GameData
     @State private var responseMessage: String = ""
     @State private var showMessage = false
+    /// Lets only the latest message's timer hide it. See `AnswerMessageClock`.
+    @State private var messageClock = AnswerMessageClock()
     @State private var sfxPlayer = SFXPlayer()
     @State private var isSidebarOpen : Bool = false
     @State private var progress = QuestionProgress()
@@ -4414,6 +4444,8 @@ struct Year2DivisionView: View {
             .compactWhileTyping($isCompact)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
+        .hidesAnswerMessage(whenChanged: [answerString], showMessage: $showMessage,
+                            isAdvancing: { progress.isAdvancing })
         .navigationBarBackButtonHidden(true)
         .questionScreen()
     }
@@ -4480,7 +4512,10 @@ struct Year2DivisionView: View {
     private func showFeedback() {
         // Not animated, so that the question can scroll Enter back into view. See `QuestionLayout`.
         showMessage = true
+        let shown = messageClock.show()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            // A newer message stays for its own full time.
+            guard messageClock.isShowing(shown) else { return }
             withAnimation {
                 showMessage = false
             }
@@ -4670,6 +4705,8 @@ struct Year2ShapesView: View {
     @State private var responseMessage: String = ""
     @EnvironmentObject var gameData: GameData
     @State private var showMessage = false
+    /// Lets only the latest message's timer hide it. See `AnswerMessageClock`.
+    @State private var messageClock = AnswerMessageClock()
     @State private var sfxPlayer = SFXPlayer()
     @State private var progress = QuestionProgress()
     /// Whether the gaps are smaller while the player types, because the question doesn't fit above the keyboard with
@@ -4751,6 +4788,8 @@ struct Year2ShapesView: View {
             .compactWhileTyping($isCompact)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
+        .hidesAnswerMessage(whenChanged: [answerString], showMessage: $showMessage,
+                            isAdvancing: { progress.isAdvancing })
         .navigationBarBackButtonHidden(true)
         .questionScreen()
     }
@@ -4793,7 +4832,10 @@ struct Year2ShapesView: View {
     private func showFeedback() {
         // Not animated, so that the question can scroll Enter back into view. See `QuestionLayout`.
         showMessage = true
+        let shown = messageClock.show()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            // A newer message stays for its own full time.
+            guard messageClock.isShowing(shown) else { return }
             withAnimation {
                 showMessage = false
             }
@@ -4856,6 +4898,8 @@ struct Year3FractionsView: View {
     @EnvironmentObject var gameData: GameData
     @State private var isSidebarOpen : Bool = false
     @State private var showMessage = false
+    /// Lets only the latest message's timer hide it. See `AnswerMessageClock`.
+    @State private var messageClock = AnswerMessageClock()
     @State private var sfxPlayer = SFXPlayer()
     @State private var canvasView = PKCanvasView()
     @State private var progress = QuestionProgress()
@@ -4944,6 +4988,8 @@ struct Year3FractionsView: View {
             }
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
+        .hidesAnswerMessage(whenChanged: [answerString, numeratorString, denominatorString], showMessage: $showMessage,
+                            isAdvancing: { progress.isAdvancing })
         .navigationBarBackButtonHidden(true)
         .questionScreen()
     }
@@ -5047,7 +5093,10 @@ struct Year3FractionsView: View {
     private func showFeedback() {
         // Not animated, so that the question can scroll Enter back into view. See `QuestionLayout`.
         showMessage = true
+        let shown = messageClock.show()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            // A newer message stays for its own full time.
+            guard messageClock.isShowing(shown) else { return }
             withAnimation {
                 showMessage = false
             }
@@ -5176,6 +5225,8 @@ struct Year3MeasurementView: View {
     @State var responseMessage: String = ""
     @EnvironmentObject var gameData: GameData
     @State private var showMessage = false
+    /// Lets only the latest message's timer hide it. See `AnswerMessageClock`.
+    @State private var messageClock = AnswerMessageClock()
     @State private var isSidebarOpen : Bool = false
     @State private var sfxPlayer = SFXPlayer()
     @State private var scale: CGFloat = Metrics.contentWidth / 20
@@ -5333,6 +5384,8 @@ struct Year3MeasurementView: View {
             .compactWhileTyping($isCompact)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
+        .hidesAnswerMessage(whenChanged: [answerString, userUnit], showMessage: $showMessage,
+                            isAdvancing: { progress.isAdvancing })
         .navigationBarBackButtonHidden(true)
         .questionScreen()
     }
@@ -5379,7 +5432,10 @@ struct Year3MeasurementView: View {
     private func showFeedback() {
         // Not animated, so that the question can scroll Enter back into view. See `QuestionLayout`.
         showMessage = true
+        let shown = messageClock.show()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            // A newer message stays for its own full time.
+            guard messageClock.isShowing(shown) else { return }
             withAnimation {
                 showMessage = false
             }
@@ -5723,6 +5779,8 @@ struct Year3TimeView: View {
     @State private var isSidebarOpen : Bool = false
     @EnvironmentObject var gameData: GameData
     @State private var showMessage = false
+    /// Lets only the latest message's timer hide it. See `AnswerMessageClock`.
+    @State private var messageClock = AnswerMessageClock()
     @State private var sfxPlayer = SFXPlayer()
     @State private var canvasView = PKCanvasView()
     @State private var progress = QuestionProgress()
@@ -6073,6 +6131,9 @@ struct Year3TimeView: View {
                                 allowed: isReadingAClock ? !dynamicTypeSize.isAccessibilitySize : !showsAClock)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
+        .hidesAnswerMessage(whenChanged: [hoursanswer, minutesanswer, "\(clockHour)", "\(clockMinute)"],
+                            showMessage: $showMessage,
+                            isAdvancing: { progress.isAdvancing })
         .navigationBarBackButtonHidden(true)
         .questionScreen()
     }
@@ -6159,7 +6220,10 @@ struct Year3TimeView: View {
     private func showFeedback() {
         // Not animated, so that the question can scroll Enter back into view. See `QuestionLayout`.
         showMessage = true
+        let shown = messageClock.show()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            // A newer message stays for its own full time.
+            guard messageClock.isShowing(shown) else { return }
             withAnimation {
                 showMessage = false
             }
@@ -6574,6 +6638,8 @@ struct Year4DecimalsView: View {
     @State var answerString: String = ""
     @State var responseMessage: String = ""
     @State private var showMessage = false
+    /// Lets only the latest message's timer hide it. See `AnswerMessageClock`.
+    @State private var messageClock = AnswerMessageClock()
     @State private var sfxPlayer = SFXPlayer()
     @State private var isSidebarOpen : Bool = false
     @EnvironmentObject var gameData: GameData
@@ -6657,6 +6723,8 @@ struct Year4DecimalsView: View {
             }
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
+        .hidesAnswerMessage(whenChanged: [answerString], showMessage: $showMessage,
+                            isAdvancing: { progress.isAdvancing })
         .navigationBarBackButtonHidden(true)
         .questionScreen()
     }
@@ -6694,7 +6762,10 @@ struct Year4DecimalsView: View {
     private func showFeedback() {
         // Not animated, so that the question can scroll Enter back into view. See `QuestionLayout`.
         showMessage = true
+        let shown = messageClock.show()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            // A newer message stays for its own full time.
+            guard messageClock.isShowing(shown) else { return }
             withAnimation {
                 showMessage = false
             }
@@ -6884,6 +6955,8 @@ struct Year4GeometryView: View {
     @State var answerString: String = ""
     @State var responseMessage: String = ""
     @State private var showMessage = false
+    /// Lets only the latest message's timer hide it. See `AnswerMessageClock`.
+    @State private var messageClock = AnswerMessageClock()
     @State private var sfxPlayer = SFXPlayer()
     @State private var isSidebarOpen : Bool = false
     @EnvironmentObject var gameData: GameData
@@ -7067,6 +7140,8 @@ struct Year4GeometryView: View {
             .compactWhileTyping($isCompact, allowed: current.question != 3)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
+        .hidesAnswerMessage(whenChanged: [answerString, userUnit], showMessage: $showMessage,
+                            isAdvancing: { progress.isAdvancing })
         .navigationBarBackButtonHidden(true)
         .questionScreen()
     }
@@ -7172,7 +7247,10 @@ struct Year4GeometryView: View {
     private func showFeedback() {
         // Not animated, so that the question can scroll Enter back into view. See `QuestionLayout`.
         showMessage = true
+        let shown = messageClock.show()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            // A newer message stays for its own full time.
+            guard messageClock.isShowing(shown) else { return }
             withAnimation {
                 showMessage = false
             }
@@ -7491,6 +7569,8 @@ struct Year4MoneyView: View {
     @EnvironmentObject var gameData: GameData
     @State private var responseMessage: String = ""
     @State private var showMessage = false
+    /// Lets only the latest message's timer hide it. See `AnswerMessageClock`.
+    @State private var messageClock = AnswerMessageClock()
     @State private var isSidebarOpen : Bool = false
     @State private var sfxPlayer = SFXPlayer()
     @State private var canvasView = PKCanvasView()
@@ -7583,6 +7663,8 @@ struct Year4MoneyView: View {
             }
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
+        .hidesAnswerMessage(whenChanged: [answerString], showMessage: $showMessage,
+                            isAdvancing: { progress.isAdvancing })
         .navigationBarBackButtonHidden(true)
         .questionScreen()
     }
@@ -7635,7 +7717,10 @@ struct Year4MoneyView: View {
     private func showFeedback() {
         // Not animated, so that the question can scroll Enter back into view. See `QuestionLayout`.
         showMessage = true
+        let shown = messageClock.show()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            // A newer message stays for its own full time.
+            guard messageClock.isShowing(shown) else { return }
             withAnimation {
                 showMessage = false
             }
@@ -7657,6 +7742,8 @@ struct Year5PercentagesView: View {
     @EnvironmentObject var gameData: GameData
     @State private var responseMessage: String = ""
     @State private var showMessage = false
+    /// Lets only the latest message's timer hide it. See `AnswerMessageClock`.
+    @State private var messageClock = AnswerMessageClock()
     @State private var sfxPlayer = SFXPlayer()
     @State private var canvasView = PKCanvasView()
     @State private var isSidebarOpen : Bool = false
@@ -7754,6 +7841,8 @@ struct Year5PercentagesView: View {
             }
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
+        .hidesAnswerMessage(whenChanged: [answerString], showMessage: $showMessage,
+                            isAdvancing: { progress.isAdvancing })
         .navigationBarBackButtonHidden(true)
         .questionScreen()
     }
@@ -7829,7 +7918,10 @@ struct Year5PercentagesView: View {
     private func showFeedback() {
         // Not animated, so that the question can scroll Enter back into view. See `QuestionLayout`.
         showMessage = true
+        let shown = messageClock.show()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            // A newer message stays for its own full time.
+            guard messageClock.isShowing(shown) else { return }
             withAnimation {
                 showMessage = false
             }
@@ -8067,6 +8159,8 @@ struct Year5StatisticsView: View {
     @State private var answerString: String = ""
     @State private var responseMessage: String = ""
     @State private var showMessage = false
+    /// Lets only the latest message's timer hide it. See `AnswerMessageClock`.
+    @State private var messageClock = AnswerMessageClock()
     @State private var sfxPlayer = SFXPlayer()
     @EnvironmentObject var gameData: GameData
     @State private var isSidebarOpen : Bool = false
@@ -8173,6 +8267,8 @@ struct Year5StatisticsView: View {
             .compactWhileTyping($isCompact, allowed: current.kind == .highestBar)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
+        .hidesAnswerMessage(whenChanged: [answerString], showMessage: $showMessage,
+                            isAdvancing: { progress.isAdvancing })
         .navigationBarBackButtonHidden(true)
         .questionScreen()
     }
@@ -8226,7 +8322,10 @@ struct Year5StatisticsView: View {
     private func showFeedback() {
         // Not animated, so that the question can scroll Enter back into view. See `QuestionLayout`.
         showMessage = true
+        let shown = messageClock.show()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            // A newer message stays for its own full time.
+            guard messageClock.isShowing(shown) else { return }
             withAnimation {
                 showMessage = false
             }
@@ -8390,6 +8489,8 @@ struct Year5VolumeView: View {
     @State private var answerString: String = ""
     @State private var responseMessage: String = ""
     @State private var showMessage = false
+    /// Lets only the latest message's timer hide it. See `AnswerMessageClock`.
+    @State private var messageClock = AnswerMessageClock()
     @State private var sfxPlayer = SFXPlayer()
     @EnvironmentObject var gameData: GameData
     @State private var canvasView = PKCanvasView()
@@ -8528,6 +8629,8 @@ struct Year5VolumeView: View {
                                 allowed: current.kind != .comparison && !dynamicTypeSize.isAccessibilitySize)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
+        .hidesAnswerMessage(whenChanged: [answerString], showMessage: $showMessage,
+                            isAdvancing: { progress.isAdvancing })
         .navigationBarBackButtonHidden(true)
         .questionScreen()
     }
@@ -8585,7 +8688,10 @@ struct Year5VolumeView: View {
     private func showFeedback() {
         // Not animated, so that the question can scroll Enter back into view. See `QuestionLayout`.
         showMessage = true
+        let shown = messageClock.show()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            // A newer message stays for its own full time.
+            guard messageClock.isShowing(shown) else { return }
             withAnimation {
                 showMessage = false
             }
@@ -8967,6 +9073,8 @@ struct Year6AlgebraView: View {
     @EnvironmentObject var gameData: GameData
     @State private var responseMessage: String = ""
     @State private var showMessage = false
+    /// Lets only the latest message's timer hide it. See `AnswerMessageClock`.
+    @State private var messageClock = AnswerMessageClock()
     @State private var sfxPlayer = SFXPlayer()
     @State private var canvasView = PKCanvasView()
     @State private var isSidebarOpen: Bool = false
@@ -9061,6 +9169,8 @@ struct Year6AlgebraView: View {
             }
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
+        .hidesAnswerMessage(whenChanged: [stringAnswer], showMessage: $showMessage,
+                            isAdvancing: { progress.isAdvancing })
         .navigationBarBackButtonHidden(true)
         .questionScreen()
     }
@@ -9104,7 +9214,10 @@ struct Year6AlgebraView: View {
     private func showFeedback() {
         // Not animated, so that the question can scroll Enter back into view. See `QuestionLayout`.
         showMessage = true
+        let shown = messageClock.show()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            // A newer message stays for its own full time.
+            guard messageClock.isShowing(shown) else { return }
             withAnimation {
                 showMessage = false
             }
@@ -9278,6 +9391,8 @@ struct Year6ProbabilityView: View {
     @State private var denominator: String = ""
     @State private var responseMessage: String = ""
     @State private var showMessage = false
+    /// Lets only the latest message's timer hide it. See `AnswerMessageClock`.
+    @State private var messageClock = AnswerMessageClock()
     @State private var isSidebarOpen: Bool = false
     @State private var progress = QuestionProgress()
     @State private var padHeight = WorkingOutView.usualPadHeight
@@ -9351,6 +9466,8 @@ struct Year6ProbabilityView: View {
                          minimum: WorkingOutView.usualPadHeight / 2, paused: showMessage)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
+        .hidesAnswerMessage(whenChanged: [numerator, denominator], showMessage: $showMessage,
+                            isAdvancing: { progress.isAdvancing })
         .navigationBarBackButtonHidden(true)
         .questionScreen()
     }
@@ -9405,7 +9522,10 @@ struct Year6ProbabilityView: View {
     private func showFeedback() {
         // Not animated, so that the question can scroll Enter back into view. See `QuestionLayout`.
         showMessage = true
+        let shown = messageClock.show()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            // A newer message stays for its own full time.
+            guard messageClock.isShowing(shown) else { return }
             withAnimation {
                 showMessage = false
             }
@@ -9562,6 +9682,8 @@ struct Year6RatiosView: View {
     @State private var answerRatio2: String = ""
     @State private var responseMessage: String = ""
     @State private var showMessage = false
+    /// Lets only the latest message's timer hide it. See `AnswerMessageClock`.
+    @State private var messageClock = AnswerMessageClock()
     @State private var isSidebarOpen: Bool = false
     @State private var progress = QuestionProgress()
     /// Stage 9C: the hint after a counted wrong answer, until the question changes.
@@ -9699,6 +9821,8 @@ struct Year6RatiosView: View {
             }
             .questionLayout(isSidebarOpen: $isSidebarOpen)
         }
+        .hidesAnswerMessage(whenChanged: [answerString, answerRatio1, answerRatio2], showMessage: $showMessage,
+                            isAdvancing: { progress.isAdvancing })
         .navigationBarBackButtonHidden(true)
         .questionScreen()
     }
@@ -9779,7 +9903,10 @@ struct Year6RatiosView: View {
     private func showFeedback() {
         // Not animated, so that the question can scroll Enter back into view. See `QuestionLayout`.
         showMessage = true
+        let shown = messageClock.show()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            // A newer message stays for its own full time.
+            guard messageClock.isShowing(shown) else { return }
             withAnimation {
                 showMessage = false
             }
