@@ -7,7 +7,7 @@ import Foundation
 /// that are right, such as "a right angle" or "Glass A", are accepted where they are marked, using `withoutArticle(_:)`
 /// and `letter(in:after:)`.
 enum AnswerFormat {
-    /// Time and Fractions: one of two boxes is empty.
+    /// Time, Fractions, Probability and Ratio: one of two boxes is empty.
     static let fillInBothBoxes = "Fill in both boxes."
     /// Fractions, Ratio and Probability: "1/2" or "2:3" typed into one box, which an iPad keyboard allows.
     static let oneNumberPerBox = "Put each number in its own box."
@@ -16,7 +16,13 @@ enum AnswerFormat {
     /// Volume and Measurement's ruler, where the unit is already written next to the box: "125cm³".
     static let justTheNumber = "Type just the number."
     /// Shapes: "diamond" or "rhombus" for the square, which is drawn standing on a corner.
-    static let turnedSquare = "Imagine it turned to sit on one side."
+    static let turnedSquare = "Turning it doesn't change what shape it is."
+    /// Shapes: shown with `turnedSquare` as a hint card, and read out with it. It says what a square is without
+    /// naming it, so that typing "diamond" doesn't give the answer away. A rhombus has 4 equal sides too, so the right
+    /// angles are what make it a square; "like the corners of a book" says what a right angle is at Year 2. Feedback
+    /// batch FB-D, from the owner's decision on the wording.
+    static let turnedSquareExplanation = SpokenText(
+        "It still has 4 equal sides and 4 right angles, like the corners of a book. What is it called?")
 
     /// Exactly one of the two boxes has something in it.
     static func isOneBoxEmpty(_ first: String, _ second: String) -> Bool {

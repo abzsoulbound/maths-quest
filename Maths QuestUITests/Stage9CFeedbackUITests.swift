@@ -291,7 +291,10 @@ final class Stage9CFeedbackUITests: MathsQuestUITestCase {
             return XCTFail("No share question in 30 Ratio questions.")
         }
         attachText("Ratio question", question.label)
-        // 99 in the first box and nothing in the second is a wrong answer.
+        // 99 in both boxes is a wrong answer: no share is 99 to 99. Two wrong answers type 99 in the first box. (One
+        // box left empty was a wrong answer too, until feedback batch FB-D asked for both boxes instead.)
+        let secondBox = app.textFields.matching(NSPredicate(format: "label == %@", "Second part of the ratio")).firstMatch
+        replaceText(in: secondBox, with: "99")
         try checkSkipShowsWorkedSolution(
             answerLabel: "The answer is \(question.answer[0]) to \(question.answer[1]).", points: points,
             readQuestion: { readRatioQuestion()?.label ?? "No Ratio question" },
@@ -831,16 +834,38 @@ class Stage9CHintKeyboardUITests: Stage9BKeyboardChecks {
                           wanted: NSPredicate(format: "label BEGINSWITH 'Find the perimeter' OR label BEGINSWITH 'Calculate the area'"))
     }
 
-    /// A share question: 99 in its first box and nothing in the second brings the longest Ratio hint.
+    /// A share question, with its shares the wrong way round: the longest Ratio hint since feedback batch FB-D, which
+    /// asks for both boxes rather than marking one left empty (whose hint was longer).
     @MainActor func testRatiosHintKeepsTheQuestionInView() throws {
-        try checkWithHint(on: "Ratios", inYear: 6, wanted: NSPredicate(format: "label BEGINSWITH 'Divide '"))
+        try checkWithHint(on: "Ratios", inYear: 6, wanted: NSPredicate(format: "label BEGINSWITH 'Divide '"),
+                          fillWrongAnswer: { [unowned self] in self.fillShareTheWrongWayRound() })
+    }
+
+    /// Types the shares of "Divide 35 in the ratio 3 to 4" the wrong way round, 20 and 15, which the hint names. Where
+    /// the ratio's two numbers are the same, that would be right, so 99 and 99, which no share is.
+    @MainActor
+    func fillShareTheWrongWayRound() {
+        let question = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Divide '")).firstMatch
+        guard let label = (try? question.snapshot())?.label,
+              let match = label.wholeMatch(of: #/Divide (\d+) in the ratio (\d+) to (\d+)/#) else {
+            return XCTFail("No share question on screen.")
+        }
+        let (total, first, second) = (Int(match.1)!, Int(match.2)!, Int(match.3)!)
+        let part = total / (first + second)
+        let wrong = first == second ? [99, 99] : [second * part, first * part]
+        attachText("Ratios: wrong answer", "\(wrong[0]) and \(wrong[1]) for \"\(label)\"")
+        for (name, number) in zip(["First part of the ratio", "Second part of the ratio"], wrong) {
+            let box = app.textFields.matching(NSPredicate(format: "label == %@", name)).firstMatch
+            replaceText(in: box, with: "\(number)")
+        }
     }
 
     /// Gives a wrong answer, then checks the question with the hint showing, with the keyboard down, up and put away.
-    /// With `wanted`, the activity is opened until a question's words match it.
+    /// With `wanted`, the activity is opened until a question's words match it. `fillWrongAnswer`, where given, fills
+    /// in the wrong answer in place of typing `wrongAnswer` in the first box.
     @MainActor
     func checkWithHint(on activity: String, inYear year: Int, wrongAnswer: String = "99",
-                       wanted: NSPredicate? = nil) throws {
+                       wanted: NSPredicate? = nil, fillWrongAnswer: (() -> Void)? = nil) throws {
         continueAfterFailure = true
         var launchedAt: Date?
         for attempt in 1...60 {
@@ -864,7 +889,12 @@ class Stage9CHintKeyboardUITests: Stage9BKeyboardChecks {
             // At these sizes the answer box can be below the screen's edge until the player scrolls to it.
             scrollAnswerFieldIntoView()
         }
-        answer(wrongAnswer, expecting: .incorrect)
+        if let fillWrongAnswer {
+            fillWrongAnswer()
+            pressEnter(expecting: .incorrect)
+        } else {
+            answer(wrongAnswer, expecting: .incorrect)
+        }
         let hintCard = app.descendants(matching: .any)["HintCard"]
         XCTAssertTrue(hintCard.waitForExistence(timeout: 3), "No hint after a wrong answer.")
         XCTAssertTrue(waitQuickly(timeout: 5) { visibleFeedback() == nil }, "\"Incorrect. Try Again!\" didn't go.")

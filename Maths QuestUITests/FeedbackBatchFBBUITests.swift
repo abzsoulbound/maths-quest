@@ -13,8 +13,10 @@ import XCTest
 /// - Geometry: a perimeter or an area typed with its unit, "24cm" ("Type just the number, then pick the unit.").
 /// - Volume: a cube or cuboid typed with its unit, "125cm3" ("Type just the number.").
 /// - Ratio: two numbers in one box, "2:3" ("Put each number in its own box.").
-/// - Shapes: "diamond" or "rhombus" for the square, which is drawn standing on a corner ("Imagine it turned to sit on
-///   one side.").
+/// - Shapes: "diamond" or "rhombus" for the square, which is drawn standing on a corner ("Turning it doesn't change
+///   what shape it is."). Batch FB-D reworded this and added a hint card saying what a square is; it is checked here
+///   and in more detail in FeedbackBatchFBDUITests.swift, which also checks one Ratio box left empty (asked for again
+///   since FB-D).
 ///
 /// Right answers written as a child might write them are accepted, and the same answers naming the wrong angle, glass
 /// or bar are still wrong:
@@ -341,7 +343,7 @@ final class FeedbackBatchFBBUITests: FeedbackBatchUITestCase {
     }
 
     /// "What is this shape called?" for the square, which is drawn standing on a corner. "diamond" and "Rhombus" are
-    /// asked for again; "triangle" is wrong; "a square" is right.
+    /// asked for again, with the hint card from batch FB-D; "triangle" is wrong; "a square" is right.
     private func checkTheTurnedSquare(largestText: Bool) throws {
         if largestText {
             extraLaunchArguments = Self.largestText
@@ -358,7 +360,7 @@ final class FeedbackBatchFBBUITests: FeedbackBatchUITestCase {
         for (attempt, answer) in ["diamond", "Rhombus"].enumerated() {
             replaceText(in: answerField, with: answer)
             checkAskedAgain(Self.turnedSquare, "Shapes\(size), \"\(answer)\"", points: start,
-                            boxes: [(answerField, answer)], checkReadable: attempt == 0)
+                            boxes: [(answerField, answer)], checkReadable: attempt == 0, hint: Self.turnedSquareHint)
         }
 
         answer("triangle", expecting: .incorrect)
@@ -454,7 +456,9 @@ class FeedbackBatchUITestCase: MathsQuestUITestCase {
     static let oneNumberPerBox = "Put each number in its own box."
     static let numberThenUnit = "Type just the number, then pick the unit."
     static let justTheNumber = "Type just the number."
-    static let turnedSquare = "Imagine it turned to sit on one side."
+    static let turnedSquare = "Turning it doesn't change what shape it is."
+    /// Batch FB-D: the hint shown with `turnedSquare`, as VoiceOver reads it on its card after "Hint: ".
+    static let turnedSquareHint = "It still has 4 equal sides and 4 right angles, like the corners of a book. What is it called?"
 
     /// The Stage 9C hint, under Enter.
     var hintCard: XCUIElement { app.descendants(matching: .any)["HintCard"] }
@@ -574,9 +578,11 @@ class FeedbackBatchUITestCase: MathsQuestUITestCase {
     /// Taps Enter on an answer written in the wrong form and checks that `message` shows (and, if `checkReadable`,
     /// that it can be read in full); that the points haven't changed; that neither Skip nor a hint has appeared; and
     /// that every box still shows what was typed, so the answer can be put right. Skip comes after two wrong answers,
-    /// so two of these in a row with no Skip show that neither counted.
+    /// so two of these in a row with no Skip show that neither counted. With `hint` (batch FB-D's turned square), that
+    /// hint shows on its card instead, read by VoiceOver as "Hint: " and the hint.
     func checkAskedAgain(_ message: String, _ when: String, points: Int, boxes: [(XCUIElement, String)],
-                         checkReadable: Bool = false, file: StaticString = #filePath, line: UInt = #line) {
+                         checkReadable: Bool = false, hint: String? = nil,
+                         file: StaticString = #filePath, line: UInt = #line) {
         if checkReadable {
             enterAndCheckTheMessage(message, when, file: file, line: line)
         } else {
@@ -584,7 +590,13 @@ class FeedbackBatchUITestCase: MathsQuestUITestCase {
         }
         assertPoints(points, file: file, line: line)
         XCTAssertFalse(skipButton.exists, "\(when): Skip appeared, so the answer counted as wrong.", file: file, line: line)
-        XCTAssertFalse(hintCard.exists, "\(when): a hint appeared, so the answer was marked.", file: file, line: line)
+        if let hint {
+            XCTAssertTrue(hintCard.waitForExistence(timeout: 3), "\(when): no hint card.", file: file, line: line)
+            XCTAssertEqual(hintCard.label, "Hint: \(hint)", "\(when): VoiceOver reads the hint card differently.",
+                           file: file, line: line)
+        } else {
+            XCTAssertFalse(hintCard.exists, "\(when): a hint appeared, so the answer was marked.", file: file, line: line)
+        }
         for (box, text) in boxes {
             XCTAssertEqual(typedText(in: box), text, "\(when): the answer was changed, so it can't be put right.",
                            file: file, line: line)

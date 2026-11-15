@@ -55,7 +55,7 @@ class MathsQuestUITestCase: XCTestCase {
         "Put each number in its own box.",
         "Type just the number, then pick the unit.",
         "Type just the number.",
-        "Imagine it turned to sit on one side.",
+        "Turning it doesn't change what shape it is.",
     ]
 
     enum UITestSafetyError: Error {

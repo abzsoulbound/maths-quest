@@ -11,6 +11,9 @@
 //    the unit has a wheel or is already written, and "diamond" for the square drawn on its corner.
 //  None of the asked-again forms can be marked right, and every right answer is still right.
 //
+//  Batch FB-D later asked for one Ratio box left empty too, and added a hint about the turned square. Those tests
+//  are in FeedbackBatchFBDTests.swift; the ones here that they changed say so.
+//
 
 import Foundation
 import Testing
@@ -404,14 +407,17 @@ struct FBBTwoBoxTests {
         }
     }
 
-    /// One ratio box left empty keeps its 9C hint and still counts, as accepted in 9C Batch 1.
-    @Test func ratioOneBoxEmptyIsUnchanged() {
+    /// One ratio box left empty is still marked incorrect, with the same 9C hint, if it is marked. Since batch FB-D
+    /// the screen asks for both boxes before marking, so it isn't counted and the hint doesn't show
+    /// (`FBDRatioTests`).
+    @Test func ratioOneBoxEmptyIsMarkedAsBefore() {
         for question in Self.ratios {
             guard let ratio = question.correctRatio else { continue }
             let response = (first: "\(ratio.first)", second: "", missing: "")
             #expect(question.evaluate(first: response.first, second: response.second, missing: "") == .incorrect)
             #expect(question.mistake(in: response) == .oneBoxEmpty)
             #expect(question.hint(after: response).text.hasPrefix("Fill in both parts of the ratio."))
+            #expect(question.hasOneBoxEmpty(first: response.first, second: response.second))
         }
     }
 
@@ -558,8 +564,11 @@ struct FBBShapeTests {
 
     @Test func theViewAsksAgainBeforeMarking() throws {
         let check = try FBBSource.function("private func checkAnswer()", inView: "Year2ShapesView")
+        // Batch FB-D shows what a square is with the message. `FBDShapeTests` checks that it is that hint and nothing
+        // else.
         try FBBSource.checkAsksAgain(in: check, guardText: "guard !current.asksAgainAboutTheTurnedSquare(answerString)",
-                                     message: "AnswerFormat.turnedSquare", marking: "current.evaluate(answerString)")
+                                     message: "AnswerFormat.turnedSquare", marking: "current.evaluate(answerString)",
+                                     allowing: ["hint ="])
     }
 }
 
@@ -655,8 +664,10 @@ private enum FBBSource {
     }
 
     /// The guard comes after the check that the question is still open and before marking, shows its message and
-    /// returns, and gives no points, plays no sound, sets no hint and counts nothing towards Skip.
+    /// returns, and gives no points, plays no sound, sets no hint and counts nothing towards Skip. `allowing` lets
+    /// a guard set what it is allowed to, such as the turned square's hint.
     static func checkAsksAgain(in check: String, guardText: String, message: String, marking: String,
+                               allowing: Set<String> = [],
                                sourceLocation: SourceLocation = #_sourceLocation) throws {
         let open = try position(of: "guard !progress.isAdvancing else { return }", in: check)
         let asks = try position(of: guardText, in: check)
@@ -665,7 +676,8 @@ private enum FBBSource {
         #expect(open < asks && asks < shown && shown < marked, sourceLocation: sourceLocation)
         let body = slice(check, from: asks, to: marked)
         #expect(body.contains("showFeedback()") && body.contains("return"), sourceLocation: sourceLocation)
-        for forbidden in ["points", "playSound", "recordWrongAttempt", "recordSubmission", "hint =", "totalQuestionsAnswered"] {
+        for forbidden in ["points", "playSound", "recordWrongAttempt", "recordSubmission", "hint =", "totalQuestionsAnswered"]
+            where !allowing.contains(forbidden) {
             #expect(!body.contains(forbidden), "\(forbidden)", sourceLocation: sourceLocation)
         }
     }

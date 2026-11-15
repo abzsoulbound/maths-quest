@@ -4602,7 +4602,8 @@ struct Year2ShapeQuestion: Equatable {
     }
 
     /// "Diamond" or "rhombus" for the square, which is drawn standing on a corner. It is still a square, so this is
-    /// asked for again with a nudge to turn it rather than marked (batch FB-B); `evaluate` still calls it incorrect.
+    /// asked for again rather than marked (batch FB-B), with a hint saying what a square is (FB-D); `evaluate` still
+    /// calls it incorrect.
     func asksAgainAboutTheTurnedSquare(_ text: String) -> Bool {
         kind == .name && figure.name == "square" && ["diamond", "rhombus"].contains(Self.typedName(text))
     }
@@ -4712,6 +4713,9 @@ struct Year2ShapesView: View {
     /// Whether the gaps are smaller while the player types, because the question doesn't fit above the keyboard with
     /// the usual ones, as with a circle and the largest text on an iPhone SE. See `compactWhileTyping(_:allowed:)`.
     @State private var isCompact = false
+    /// Feedback batch FB-D: what a square is, after "diamond" for the square standing on its corner, until the
+    /// question changes. See `AnswerFormat.turnedSquareExplanation`.
+    @State private var hint: SpokenText?
 
     var body: some View {
         ZStack {
@@ -4743,7 +4747,7 @@ struct Year2ShapesView: View {
 
 
                 if showMessage {
-                    AnswerFeedbackText(message: responseMessage)
+                    AnswerFeedbackText(message: responseMessage, alsoSaying: hintAnnouncement)
                         .padding()
                         .transition(.answerFeedback)
                 }
@@ -4755,6 +4759,7 @@ struct Year2ShapesView: View {
                     } label: {
                         Text("Enter ")
                             .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
+                            .movesAtOnce(whenMessageAppears: showMessage)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
@@ -4784,6 +4789,8 @@ struct Year2ShapesView: View {
                     }
                 }
                 .questionSubmitRow()
+
+                ExplanationCards(hint: hint, solution: nil, place: .belowSubmitRow)
             }
             .compactWhileTyping($isCompact)
             .questionLayout(isSidebarOpen: $isSidebarOpen)
@@ -4800,8 +4807,10 @@ struct Year2ShapesView: View {
 
         // Like a blank answer, "diamond" for the turned square is asked for again: no score, and no count towards
         // Skip. Batch FB-B.
+        // FB-D: it says that turning a shape doesn't change it, and what a square is, without naming it.
         guard !current.asksAgainAboutTheTurnedSquare(answerString) else {
             responseMessage = AnswerFormat.turnedSquare
+            hint = AnswerFormat.turnedSquareExplanation
             showFeedback()
             return
         }
@@ -4813,6 +4822,7 @@ struct Year2ShapesView: View {
         case .correct:
             guard progress.recordCorrectAnswer() else { return }
             responseMessage = "Correct!"
+            hint = nil
             showFeedback()
             gameData.points += 1
             gameData.totalQuestionsAnswered += 1
@@ -4827,6 +4837,11 @@ struct Year2ShapesView: View {
             showFeedback()
             progress.recordWrongAttempt()
         }
+    }
+
+    /// The hint, read with the message that it goes with. See `AnswerFeedbackText`.
+    private var hintAnnouncement: String? {
+        responseMessage == AnswerFormat.turnedSquare ? hint.map { "Hint: \($0.spoken)" } : nil
     }
 
     private func showFeedback() {
@@ -4846,6 +4861,7 @@ struct Year2ShapesView: View {
         current = Year2ShapeQuestion.random()
         answerString = ""
         responseMessage = ""
+        hint = nil
         progress.reset()
     }
 }
@@ -9670,6 +9686,13 @@ struct Year6RatioQuestion: Equatable {
     func hasTwoNumbersInOneBox(first: String, second: String) -> Bool {
         correctRatio != nil && AnswerFormat.hasTwoNumbersInOneBox(first, second)
     }
+
+    /// One of the ratio's two boxes filled in and the other left empty. It is asked for again with "Fill in both
+    /// boxes." rather than marked, as in Time, Fractions and Probability (feedback batch FB-D, from the owner's
+    /// decision); `evaluate` still calls it incorrect. Missing-value questions have one box.
+    func hasOneBoxEmpty(first: String, second: String) -> Bool {
+        correctRatio != nil && AnswerFormat.isOneBoxEmpty(first, second)
+    }
 }
 
 struct Year6RatiosView: View {
@@ -9870,6 +9893,13 @@ struct Year6RatiosView: View {
         // Skip. Batch FB-B.
         guard !current.hasTwoNumbersInOneBox(first: answerRatio1, second: answerRatio2) else {
             responseMessage = AnswerFormat.oneNumberPerBox
+            showFeedback()
+            return
+        }
+
+        // FB-D: so is one box left empty. A hint from an earlier wrong answer stays, but isn't read out again.
+        guard !current.hasOneBoxEmpty(first: answerRatio1, second: answerRatio2) else {
+            responseMessage = AnswerFormat.fillInBothBoxes
             showFeedback()
             return
         }
