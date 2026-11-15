@@ -2963,6 +2963,8 @@ struct ShopView: View {
 
 struct FeedbackView: View {
     static let privacyReminder = "Please don't write your name, school, address or anything else about you."
+    /// Children wrote questions and asked for answers here. Nobody can reply, because nothing says who sent a message.
+    static let noReplyNotice = "You won't get a reply to messages sent here."
 
     /// What happened when Enter was last pressed. It's shown under the box until the child types again.
     enum SendStatus: Equatable {
@@ -3055,6 +3057,13 @@ struct FeedbackView: View {
 
             // Feedback is stored without any name or ID, so ask children not to type personal details into it.
             Text(FeedbackView.privacyReminder)
+                .scaledFont(size: Metrics.contentWidth * 0.04, maximum: 28)
+                .foregroundStyle(.onBackground)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            // For the same reason no one can answer, so children don't wait for a reply.
+            Text(FeedbackView.noReplyNotice)
                 .scaledFont(size: Metrics.contentWidth * 0.04, maximum: 28)
                 .foregroundStyle(.onBackground)
                 .multilineTextAlignment(.center)
@@ -5118,6 +5127,14 @@ struct Year3MeasurementQuestion: Equatable {
             return .correct
         }
     }
+
+    /// A conversion with the right number but the wrong unit, or none, is still wrong, but the message says the
+    /// number is right, as Geometry's does, so it doesn't look as if a right answer was marked wrong.
+    func hasRightNumberButWrongUnit(answer: String, unit: String) -> Bool {
+        guard kind == .convert, unit != toUnit,
+              case let .number(numerator, denominator, _) = TypedAnswer.decimalEntry(answer) else { return false }
+        return TypedAnswer.fractionsAreEqual(numerator, denominator, convertedAmount, 1)
+    }
 }
 
 struct Year3MeasurementView: View {
@@ -5313,7 +5330,8 @@ struct Year3MeasurementView: View {
                 resetQuestion()
             }
         case .incorrect:
-            responseMessage = "Incorrect. Try Again!"
+            responseMessage = current.hasRightNumberButWrongUnit(answer: answerString, unit: userUnit)
+                ? "Correct number, but wrong unit!" : "Incorrect. Try Again!"
             sfxPlayer.playSound(named: "wrong", volume: gameData.sfxvolume)
             showFeedback()
             progress.recordWrongAttempt()
@@ -8279,6 +8297,12 @@ struct Year5VolumeQuestion: Equatable {
             return answer.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == glassWithMore
         }
     }
+
+    /// "1,000" is one thousand with a thousands comma but 1 with a decimal comma, so a cube or cuboid answer written
+    /// like that is asked for again without the comma, as in Measurement, rather than marked. "125,0" is still 125.
+    func needsWritingWithoutAComma(answer: String) -> Bool {
+        kind != .comparison && TypedAnswer.decimalEntry(answer) == .ambiguousComma
+    }
 }
 
 struct Year5VolumeView: View {
@@ -8440,6 +8464,13 @@ struct Year5VolumeView: View {
         // A blank answer is asked for, not marked: it scores nothing and doesn't count towards Skip.
         guard !TypedAnswer.isBlank(answerString) else {
             responseMessage = "Please enter an answer!"
+            showFeedback()
+            return
+        }
+
+        // Like a blank answer, "1,000" is asked for again: it scores nothing and doesn't count towards Skip.
+        guard !current.needsWritingWithoutAComma(answer: answerString) else {
+            responseMessage = "Write it without a comma."
             showFeedback()
             return
         }
