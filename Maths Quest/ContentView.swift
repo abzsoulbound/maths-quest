@@ -2687,6 +2687,8 @@ struct ShopView: View {
             case spendPoints
             /// Under the row of the colour with this hex code.
             case colour(String)
+            /// Under "Surprise me" (FB-F).
+            case surprise
         }
 
         let text: String
@@ -2721,6 +2723,14 @@ struct ShopView: View {
                 .foregroundStyle(.onBackground)
                 .multilineTextAlignment(.center)
                 .accessibilityAddTraits(.isHeader)
+
+            surpriseMe
+
+            if let message, message.place == .surprise {
+                StatusBanner(message: message.text, tone: message.tone)
+                    .id(message)
+                    .transition(Self.messageTransition)
+            }
 
             swatchGrid
         }
@@ -2764,6 +2774,30 @@ struct ShopView: View {
         dynamicTypeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
             : AnyLayout(HStackLayout(spacing: 12))
+    }
+
+    /// "Surprise me" (FB-F): a background picked at random from the colours the child has already unlocked. With no
+    /// other colour unlocked it's turned off, and a line under it says why.
+    private var surpriseMe: some View {
+        let canSurprise = !Self.surpriseOptions(in: gameData).isEmpty
+        return VStack(spacing: 8) {
+            Button(Self.surpriseButtonTitle) {
+                hideKeyboard()
+                surprise()
+            }
+            .buttonStyle(FilledButtonStyle())
+            .disabled(!canSurprise)
+            .accessibilityHint(canSurprise ? Self.surpriseHint : "")
+
+            if !canSurprise {
+                Text(Self.surpriseNeedsAnotherColour)
+                    .scaledFont(size: Metrics.contentWidth * 0.04, maximum: 28)
+                    .foregroundStyle(.onBackground)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 
     /// Every colour, as a row of its four strengths. Not a lazy stack, so every swatch is always there for VoiceOver.
@@ -2927,6 +2961,53 @@ struct ShopView: View {
 
     private func selectColour(colour: ShopColour, opacityOption: ShopOpacity) {
         gameData.selectColour(hex: colour.hexCode, opacity: opacityOption.opacity)
+    }
+
+    // MARK: Surprise me (FB-F)
+
+    /// One swatch in the shop: a colour at one strength.
+    struct SurpriseOption: Equatable {
+        let name: String
+        let hexCode: String
+        let opacity: Double
+    }
+
+    static let surpriseButtonTitle = "Surprise me"
+    static let surpriseHint = "Picks one of your unlocked colours."
+    static let surpriseNeedsAnotherColour = "Unlock another colour to use Surprise me."
+
+    static func surpriseMessage(for option: SurpriseOption) -> String {
+        "Surprise! Your background is now \(option.name) \(Int((option.opacity * 100).rounded()))%."
+    }
+
+    /// What "Surprise me" can pick: every swatch in the shop that is unlocked and isn't the background now, in the
+    /// shop's order. It only reads what the save already holds, so it can't unlock anything.
+    static func surpriseOptions(from shop: [ShopColour] = colours, in gameData: GameData) -> [SurpriseOption] {
+        shop.flatMap { colour in
+            colour.opacities.compactMap { option -> SurpriseOption? in
+                guard gameData.isColourUnlocked(colour.hexCode, opacity: option.opacity),
+                      !gameData.isColourSelected(colour.hexCode, opacity: option.opacity) else { return nil }
+                return SurpriseOption(name: colour.name, hexCode: colour.hexCode, opacity: option.opacity)
+            }
+        }
+    }
+
+    /// Picks one of the options and makes it the background, and returns it, or nil if there was nothing to pick. It
+    /// chooses with `selectColour`, as tapping an unlocked swatch does, so it never spends points, and it refuses a
+    /// locked colour. The save keeps the same two fields it always had. The generator can be fixed in tests.
+    @discardableResult
+    static func surprise<G: RandomNumberGenerator>(_ gameData: GameData, from shop: [ShopColour] = colours,
+                                                   using generator: inout G) -> SurpriseOption? {
+        guard let pick = surpriseOptions(from: shop, in: gameData).randomElement(using: &generator),
+              gameData.selectColour(hex: pick.hexCode, opacity: pick.opacity) else { return nil }
+        return pick
+    }
+
+    private func surprise() {
+        var generator = SystemRandomNumberGenerator()
+        if let pick = Self.surprise(gameData, using: &generator) {
+            show(Self.surpriseMessage(for: pick), .success, at: .surprise)
+        }
     }
 
     private func purchaseColour(colour: ShopColour, opacityOption: ShopOpacity) {
