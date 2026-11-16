@@ -615,6 +615,8 @@ struct Stage9BFormScreenTests {
         let message = try #require(labels.dropFirst(3).first)
         #expect(message.hasPrefix("Message from the creator."))
         #expect(message.contains("Hi there Player!"))
+        // FB-E: the whole message is one item, read in full.
+        #expect(message == InformationView.message(for: ""))
     }
 }
 

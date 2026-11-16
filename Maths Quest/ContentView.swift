@@ -3161,21 +3161,39 @@ struct InformationView: View {
         .onAppear { loadMessage() }
     }
 
-    private func loadMessage() {
-        message = """
+    /// What Feedback is for, in words a child can follow (FB-E). It names the sidebar's "Feedback" and the "Menu"
+    /// button that opens the sidebar, as VoiceOver reads them.
+    static let feedbackPurpose = "You can help by using Feedback in the menu. Tell me if something doesn't work, if a question looks wrong, or if you have an idea for the app."
+
+    /// That no one replies, why, and where a child can get help instead (FB-E). It agrees with Feedback's own
+    /// "You won't get a reply to messages sent here."
+    static let noReplies = "I can't reply to messages, because they don't say who sent them. If you're stuck on a question, ask a grown-up or your teacher."
+
+    /// The creator's message: their greeting, thanks and signature, with what Feedback is for, the same privacy
+    /// reminder Feedback shows, and that there are no replies (FB-E).
+    static func message(for username: String) -> String {
+        """
         Message from the creator.
 
-        Hi there \(gameData.username.isEmpty ? "Player" : gameData.username)!
+        Hi there \(username.isEmpty ? "Player" : username)!
 
-        I hope this message finds you well. I've been working hard on this app and I'm constantly striving to improve it.
+        I've been working hard on Maths Quest, and I'm always trying to make it better.
 
-        If you have suggestions or ideas, please use the feedback section in the sidebar.
+        \(feedbackPurpose)
+
+        \(FeedbackView.privacyReminder)
+
+        \(noReplies)
 
         Thank you for your support!
 
         Have Fun!
         Ewdo Ozdemir
         """
+    }
+
+    private func loadMessage() {
+        message = Self.message(for: gameData.username)
     }
 }
 
