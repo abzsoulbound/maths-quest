@@ -1794,6 +1794,9 @@ struct QuestionLayout<Content: View>: View {
 struct AnswerFeedbackText: View {
     let message: String
     var outlined = true
+    /// What VoiceOver reads in place of `message`, where the message has a sign it might not read, such as "×".
+    /// Stage 9C Batch 2.
+    var spokenMessage: String? = nil
     /// A line under the message, such as "4 × 5 = 20" under "Correct!". Stage 9C.
     var detail: SpokenText? = nil
     /// Read out after the message and the detail, but shown elsewhere, such as "Hint: …". Stage 9C.
@@ -1807,7 +1810,8 @@ struct AnswerFeedbackText: View {
 
     /// Everything VoiceOver reads out as the message appears, in one announcement.
     var announcement: String {
-        [message, detail?.spoken, alsoSaying].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " ")
+        [spokenMessage ?? message, detail?.spoken, alsoSaying].compactMap { $0 }.filter { !$0.isEmpty }
+            .joined(separator: " ")
     }
 
     var body: some View {
@@ -1861,6 +1865,7 @@ struct AnswerFeedbackText: View {
                 .foregroundColor(isCorrect ? .green : .red)
                 .font(.system(size: Metrics.contentWidth * 0.075))
                 .fontWeight(.bold)
+                .accessibilityLabel(spokenMessage ?? message)
         }
     }
 }
@@ -9170,10 +9175,11 @@ struct Year6AlgebraQuestion: Equatable {
 
         switch kind {
         case .solve:
-            // The box follows "x =", but "x = 12" typed in full is also accepted.
-            var typed = text.lowercased().filter { !$0.isWhitespace }
-            if typed.hasPrefix("x=") {
-                typed.removeFirst(2)
+            // The box follows "x =", but "x = 12" typed in full is also accepted, and so are "12 = x" and a plus sign,
+            // "+12" or "x = +12" (Stage 9C Batch 2, B2-2).
+            var typed = Self.valueOfX(in: Self.cleaned(text))
+            if typed.hasPrefix("+") {
+                typed.removeFirst()
             }
             return TypedAnswer.wholeNumber(typed) == second ? .correct : .incorrect
         case .simplify, .expand:
@@ -9194,6 +9200,12 @@ struct Year6AlgebraView: View {
     @State private var canvasView = PKCanvasView()
     @State private var isSidebarOpen: Bool = false
     @State private var progress = QuestionProgress()
+    /// Stage 9C Batch 2: the hint after a counted wrong answer, until the question changes.
+    @State private var hint: SpokenText?
+    /// Stage 9C Batch 2: the worked solution after Skip, until Next Question.
+    @State private var solution: WorkedSolution?
+    /// Stage 9C Batch 2: why an answer equal to the right one is asked for again (B2-3 and B2-4).
+    @State private var askedAgain: AskedAgainMessage?
 
     var body: some View {
         ZStack {
@@ -9235,14 +9247,22 @@ struct Year6AlgebraView: View {
                             checkAnswer()
                             hideKeyboard()
                         }
+                        .answeredBySolution(solution != nil)
                 }
                 
                 if showMessage {
-                    AnswerFeedbackText(message: responseMessage)
+                    AnswerFeedbackText(message: responseMessage, spokenMessage: askedAgain?.message.spoken,
+                                       detail: correctLine ?? askedAgain?.detail, alsoSaying: hintAnnouncement)
                         .padding()
                         .transition(.answerFeedback)
                 }
 
+                ExplanationCards(hint: hint, solution: solution, place: .aboveSubmitRow)
+
+                if solution != nil {
+                    NextQuestionButton(action: nextQuestion)
+                        .questionSubmitRow()
+                } else {
                 HStack{
                     Button {
                         hideKeyboard()
@@ -9250,6 +9270,7 @@ struct Year6AlgebraView: View {
                     } label: {
                         Text("Enter ")
                             .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
+                            .movesAtOnce(whenMessageAppears: showMessage)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
@@ -9266,7 +9287,7 @@ struct Year6AlgebraView: View {
 
                                 AdManager.shared.showRewardedInterstitialAd(from: rootVC) {
                                     guard progress.recordSkip() else { return }
-                                    gameData.skipQuestion(resetQuestion: resetQuestion)
+                                    showSolution()
                                 }
                             }
                         } label: {
@@ -9279,6 +9300,9 @@ struct Year6AlgebraView: View {
                     }
                 }
                 .questionSubmitRow()
+                }
+
+                ExplanationCards(hint: hint, solution: solution, place: .belowSubmitRow)
 
                 WorkingOutView(canvasView: $canvasView)
             }
@@ -9294,6 +9318,16 @@ struct Year6AlgebraView: View {
         // Enter and Return are ignored once the question has been answered or skipped.
         guard !progress.isAdvancing else { return }
 
+        // B2-3 and B2-4: the right value written another way, or not simplified, is asked for again, like a blank
+        // answer: no score, no sound, no count towards Skip, and no new hint. A hint from an earlier wrong answer stays,
+        // but isn't read out again.
+        askedAgain = current.askedAgain(stringAnswer)
+        if let askedAgain {
+            responseMessage = askedAgain.message.text
+            showFeedback()
+            return
+        }
+
         switch current.evaluate(stringAnswer) {
         case .unanswered:
             responseMessage = "Please enter an answer!"
@@ -9301,6 +9335,7 @@ struct Year6AlgebraView: View {
         case .correct:
             guard progress.recordCorrectAnswer() else { return }
             responseMessage = "Correct!"
+            hint = nil
             showFeedback()
             gameData.points += 1
             gameData.totalQuestionsAnswered += 1
@@ -9311,6 +9346,7 @@ struct Year6AlgebraView: View {
             }
         case .incorrect:
             responseMessage = "Incorrect. Try Again!"
+            hint = current.hint(after: stringAnswer)
             sfxPlayer.playSound(named: "wrong", volume: gameData.sfxvolume)
             showFeedback()
             progress.recordWrongAttempt()
@@ -9323,14 +9359,42 @@ struct Year6AlgebraView: View {
         responseMessage = ""
         showMessage = false
         canvasView.drawing = PKDrawing()
+        hint = nil
+        solution = nil
+        askedAgain = nil
         progress.reset()
+    }
+
+    /// The line under "Correct!". See `AnswerFeedbackText`.
+    private var correctLine: SpokenText? {
+        responseMessage == "Correct!" ? current.correctLine : nil
+    }
+
+    /// The hint, read with "Incorrect. Try Again!". See `AnswerFeedbackText`.
+    private var hintAnnouncement: String? {
+        responseMessage == "Incorrect. Try Again!" ? hint.map { "Hint: \($0.spoken)" } : nil
+    }
+
+    /// After a rewarded Skip: the question stays, worked out, until Next Question. No point is given.
+    private func showSolution() {
+        hideKeyboard()
+        hint = nil
+        solution = current.workedSolution
+    }
+
+    /// Next Question, once only: a second tap finds no solution showing.
+    private func nextQuestion() {
+        guard solution != nil else { return }
+        resetQuestion()
     }
 
     private func showFeedback() {
         // Not animated, so that the question can scroll Enter back into view. See `QuestionLayout`.
         showMessage = true
         let shown = messageClock.show()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+        // Stage 9C Batch 2: 1.5 seconds, as in Probability and Ratio, and longer for a message asking again that has
+        // a second line to read.
+        DispatchQueue.main.asyncAfter(deadline: .now() + (askedAgain?.detail == nil ? 1.5 : 3)) {
             // A newer message stays for its own full time.
             guard messageClock.isShowing(shown) else { return }
             withAnimation {
@@ -9511,6 +9575,10 @@ struct Year6ProbabilityView: View {
     @State private var isSidebarOpen: Bool = false
     @State private var progress = QuestionProgress()
     @State private var padHeight = WorkingOutView.usualPadHeight
+    /// Stage 9C Batch 2: the hint after a counted wrong answer, until the question changes.
+    @State private var hint: SpokenText?
+    /// Stage 9C Batch 2: the worked solution after Skip, until Next Question.
+    @State private var solution: WorkedSolution?
 
     var body: some View {
         ZStack {
@@ -9530,13 +9598,20 @@ struct Year6ProbabilityView: View {
                     checkAnswer()
                     hideKeyboard()
                 }
+                .answeredBySolution(solution != nil)
 
                 if showMessage {
-                    AnswerFeedbackText(message: responseMessage)
+                    AnswerFeedbackText(message: responseMessage, detail: correctLine, alsoSaying: hintAnnouncement)
                         .padding()
                         .transition(.answerFeedback)
                 }
 
+                ExplanationCards(hint: hint, solution: solution, place: .aboveSubmitRow)
+
+                if solution != nil {
+                    NextQuestionButton(action: nextQuestion)
+                        .questionSubmitRow()
+                } else {
                 HStack {
                     Button {
                         hideKeyboard()
@@ -9544,6 +9619,7 @@ struct Year6ProbabilityView: View {
                     } label: {
                         Text("Enter")
                             .buttonBox(Color.white, cornerRadius: Metrics.contentWidth * 0.015, tapMargin: 6)
+                            .movesAtOnce(whenMessageAppears: showMessage)
                     }
                     .disabled(showMessage)
                     .foregroundColor(.black)
@@ -9559,7 +9635,7 @@ struct Year6ProbabilityView: View {
 
                                 AdManager.shared.showRewardedInterstitialAd(from: rootVC) {
                                     guard progress.recordSkip() else { return }
-                                    gameData.skipQuestion(resetQuestion: resetQuestion)
+                                    showSolution()
                                 }
                             }
                         } label: {
@@ -9572,6 +9648,9 @@ struct Year6ProbabilityView: View {
                     }
                 }
                 .questionSubmitRow()
+                }
+
+                ExplanationCards(hint: hint, solution: solution, place: .belowSubmitRow)
 
                 WorkingOutView(canvasView: $canvasView, padHeight: padHeight)
             }
@@ -9593,7 +9672,32 @@ struct Year6ProbabilityView: View {
         denominator = ""
         canvasView.drawing = PKDrawing()
         responseMessage = ""
+        hint = nil
+        solution = nil
         progress.reset()
+    }
+
+    /// The line under "Correct!". See `AnswerFeedbackText`.
+    private var correctLine: SpokenText? {
+        responseMessage == "Correct!" ? current.correctLine : nil
+    }
+
+    /// The hint, read with "Incorrect. Try Again!". See `AnswerFeedbackText`.
+    private var hintAnnouncement: String? {
+        responseMessage == "Incorrect. Try Again!" ? hint.map { "Hint: \($0.spoken)" } : nil
+    }
+
+    /// After a rewarded Skip: the question stays, worked out, until Next Question. No point is given.
+    private func showSolution() {
+        hideKeyboard()
+        hint = nil
+        solution = current.workedSolution
+    }
+
+    /// Next Question, once only: a second tap finds no solution showing.
+    private func nextQuestion() {
+        guard solution != nil else { return }
+        resetQuestion()
     }
 
     private func checkAnswer() {
@@ -9617,6 +9721,7 @@ struct Year6ProbabilityView: View {
         case .correct:
             guard progress.recordCorrectAnswer() else { return }
             responseMessage = "Correct!"
+            hint = nil
             gameData.points += 1
             gameData.totalQuestionsAnswered += 1
             gameData.saveData()
@@ -9628,6 +9733,7 @@ struct Year6ProbabilityView: View {
             }
         case .incorrect:
             responseMessage = "Incorrect. Try Again!"
+            hint = current.hint(after: (numerator: numerator, denominator: denominator))
             sfxPlayer.playSound(named: "wrong", volume: gameData.sfxvolume)
             showFeedback()
             progress.recordWrongAttempt()

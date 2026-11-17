@@ -10,7 +10,8 @@
 //
 //  Every piece is worked out from the question's own numbers, separately from how the answer is checked, and has the
 //  words VoiceOver reads alongside the words shown. The views only show what these return. Batch 1 covers Year 2
-//  Multiplication, Year 2 Division, Year 4 Geometry and Year 6 Ratio; every other activity is unchanged.
+//  Multiplication, Year 2 Division, Year 4 Geometry and Year 6 Ratio, and Batch 2 adds Year 6 Algebra and Year 6
+//  Probability; every other activity is unchanged.
 //
 
 import Foundation
@@ -81,6 +82,15 @@ enum ExplanationWording {
     /// "group" or "groups".
     static func groups(_ count: Int) -> String {
         count == 1 ? "group" : "groups"
+    }
+
+    /// "x + 7 = 19" as VoiceOver should read it, "x plus 7 equals 19", naming each sign written with a space either
+    /// side. Batch 2.
+    static func say(_ text: String) -> String {
+        text.replacingOccurrences(of: " + ", with: " plus ")
+            .replacingOccurrences(of: " − ", with: " minus ")
+            .replacingOccurrences(of: " = ", with: " equals ")
+            .replacingOccurrences(of: " × ", with: " times ")
     }
 }
 
@@ -608,5 +618,403 @@ extension Year6RatioQuestion: ExplainedQuestion {
             let terms = Self.ratio(first, second)
             return SpokenText("\(question.text) = \(terms.text)", spoken: "\(question.spoken) equals \(terms.spoken)")
         }
+    }
+}
+
+// MARK: - Year 6 Algebra
+
+extension Year6AlgebraQuestion: ExplainedQuestion {
+    /// The one answer box.
+    typealias Response = String
+
+    enum Mistake: Equatable {
+        /// Solve: the total, such as 19 for x + 7 = 19.
+        case total
+        /// Solve: the number added on rather than taken away, such as 26 for x + 7 = 19.
+        case added
+        /// Solve: the number added to x, such as 7 for x + 7 = 19.
+        case numberAdded
+        /// Simplify: the right number of x's without the x, such as 19 for 7x + 12x.
+        case missingX
+        /// Simplify: an x², such as 19x² for 7x + 12x.
+        case squared
+        /// Simplify: the x's multiplied rather than added, such as 84x for 7x + 12x.
+        case multiplied
+        /// Expand: only the x term multiplied, such as 15x + 2 for 3(5x + 2).
+        case onlyFirst
+        /// Expand: only the number multiplied, such as 5x + 6 for 3(5x + 2).
+        case onlyNumber
+        /// Expand: what's inside the bracket, 5x + 2 for 3(5x + 2).
+        case notMultiplied
+        /// Expand: the number outside added rather than multiplied, 8x + 5 for 3(5x + 2).
+        case addedMultiplier
+        /// Expand: both parts added into one, such as 21x or 21 for 3(5x + 2).
+        case combined
+    }
+
+    /// The number x + first makes: 19 in "x + 7 = 19".
+    private var total: Int {
+        first + second
+    }
+
+    /// The question as VoiceOver reads it: "x plus 7 equals 19", or with the bracket named in "3(5x + 2)".
+    private var spokenQuestion: String {
+        kind == .expand ? spokenExpression : ExplanationWording.say(expression)
+    }
+
+    /// The right answer as it's written: "x = 12", "19x" or "15x + 6".
+    var answerText: String {
+        switch kind {
+        case .solve:
+            return "x = \(second)"
+        case .simplify:
+            return Self.term(total)
+        case .expand:
+            return "\(Self.term(multiplier * first)) + \(multiplier * second)"
+        }
+    }
+
+    /// The mistake `response` shows, if any, checked after the answer is known to be wrong and not asked for again.
+    /// What was typed is read for its value, so "3 × 5x + 2" is the same mistake as "15x + 2".
+    func mistake(in response: Response) -> Mistake? {
+        let typed = Self.cleaned(response)
+        if kind == .simplify, typed.hasSuffix("x^2") || typed.hasSuffix("x²") || typed.hasSuffix("x2") {
+            return .squared
+        }
+        guard let value = AlgebraValue(reading: kind == .solve ? Self.valueOfX(in: typed) : typed),
+              !value.equals(answer) else { return nil }
+        func isValue(_ coefficient: Int, _ constant: Int) -> Bool {
+            value.equals(LinearExpression(coefficient: coefficient, constant: constant))
+        }
+        switch kind {
+        case .solve:
+            if isValue(0, total) { return .total }
+            if isValue(0, first + total) { return .added }
+            if isValue(0, first) { return .numberAdded }
+        case .simplify:
+            if isValue(0, total) { return .missingX }
+            if isValue(first * second, 0) { return .multiplied }
+        case .expand:
+            let (m, a, b) = (multiplier, first, second)
+            if isValue(m * a, b) { return .onlyFirst }
+            if isValue(a, m * b) { return .onlyNumber }
+            if isValue(a, b) { return .notMultiplied }
+            if isValue(a + m, b + m) { return .addedMultiplier }
+            if isValue(m * (a + b), 0) || isValue(0, m * (a + b)) { return .combined }
+        }
+        return nil
+    }
+
+    /// "7x means 7 lots of x", or "x means 1 lot of x".
+    private static func lots(_ coefficient: Int) -> String {
+        coefficient == 1 ? "x means 1 lot of x" : "\(coefficient)x means \(coefficient) lots of x"
+    }
+
+    func hint(after response: Response) -> SpokenText {
+        let found = mistake(in: response)
+        switch kind {
+        case .solve:
+            switch found {
+            case .total:
+                return SpokenText("\(total) is the total. What number plus \(first) makes \(total)?")
+            case .added:
+                return SpokenText("You added \(first). To undo + \(first), take \(first) away instead.",
+                                  spoken: "You added \(first). To undo plus \(first), take \(first) away instead.")
+            case .numberAdded:
+                return SpokenText("\(first) is the number added to x. What number plus \(first) makes \(total)?")
+            default:
+                return SpokenText("Take \(first) away from both sides, so x is on its own.")
+            }
+        case .simplify:
+            let strategy = "\(Self.lots(first)) and \(Self.lots(second)). How many lots of x is that altogether?"
+            switch found {
+            case .missingX:
+                return SpokenText("Keep the x. The answer is a number of x's, not a number on its own.")
+            case .squared:
+                return SpokenText("Adding x's doesn't make x². \(strategy)",
+                                  spoken: "Adding x's doesn't make x squared. \(strategy)")
+            case .multiplied:
+                return SpokenText("You multiplied. \(strategy)")
+            default:
+                return SpokenText(strategy)
+            }
+        case .expand:
+            let strategy = "Multiply each part inside the bracket by \(multiplier)."
+            let inside = Self.term(first)
+            switch found {
+            case .onlyFirst:
+                return SpokenText("You multiplied \(inside) by \(multiplier), but not \(second). \(strategy)")
+            case .onlyNumber:
+                return SpokenText("You multiplied \(second) by \(multiplier), but not \(inside). \(strategy)")
+            case .notMultiplied:
+                return SpokenText("That is what's inside the bracket. "
+                    + "The \(multiplier) outside means multiply each part by \(multiplier).")
+            case .addedMultiplier:
+                return SpokenText("Expanding means multiplying each part by \(multiplier), not adding \(multiplier).")
+            case .combined:
+                return SpokenText("An x term and a number can't be added together. Keep them as two parts joined by +.",
+                                  spoken: "An x term and a number can't be added together. "
+                                      + "Keep them as two parts joined by plus.")
+            default:
+                return SpokenText(strategy)
+            }
+        }
+    }
+
+    var workedSolution: WorkedSolution {
+        switch kind {
+        case .solve:
+            let steps = ["To get x on its own, take \(first) away from both sides.",
+                         "\(total) − \(first) = \(second), so x = \(second).",
+                         "Check: \(second) + \(first) = \(total)."]
+            return WorkedSolution(steps: steps.map { SpokenText($0, spoken: ExplanationWording.say($0)) },
+                                  answer: ExplanationWording.answer(answerText, spoken: "x equals \(second)"))
+        case .simplify:
+            let lot = { (coefficient: Int) in
+                coefficient == 1 ? "x is 1 lot of x" : "\(coefficient)x is \(coefficient) lots of x"
+            }
+            let steps = ["\(lot(first)), and \(lot(second)).",
+                         "\(first) + \(second) = \(total), so that is \(total) lots of x."]
+            return WorkedSolution(steps: steps.map { SpokenText($0, spoken: ExplanationWording.say($0)) },
+                                  answer: ExplanationWording.answer(answerText))
+        case .expand:
+            let steps = [
+                SpokenText("Multiply each part inside the bracket by \(multiplier)."),
+                SpokenText("\(multiplier) × \(Self.term(first)) = \(Self.term(multiplier * first)) and "
+                               + "\(multiplier) × \(second) = \(multiplier * second).",
+                           spoken: "\(multiplier) times \(Self.term(first)) equals \(Self.term(multiplier * first)) and "
+                               + "\(multiplier) times \(second) equals \(multiplier * second)."),
+                SpokenText("Join the two parts with +.", spoken: "Join the two parts with plus.")
+            ]
+            return WorkedSolution(steps: steps,
+                                  answer: ExplanationWording.answer(answerText, spoken: ExplanationWording.say(answerText)))
+        }
+    }
+
+    var correctLine: SpokenText {
+        switch kind {
+        case .solve:
+            let line = "x = \(second), because \(second) + \(first) = \(total)"
+            return SpokenText(line, spoken: ExplanationWording.say(line))
+        case .simplify, .expand:
+            return SpokenText("\(expression) = \(answerText)",
+                              spoken: "\(spokenQuestion) equals \(ExplanationWording.say(answerText))")
+        }
+    }
+}
+
+// MARK: - Year 6 Probability
+
+extension Year6ProbabilityQuestion: ExplainedQuestion {
+    /// The top and bottom boxes of the fraction.
+    typealias Response = (numerator: String, denominator: String)
+
+    enum Mistake: Equatable {
+        /// The fraction upside down, such as 12/3 for 3/12.
+        case upsideDown
+        /// More than 1, such as 5/3.
+        case moreThanOne
+        /// 0, which would mean it can't happen.
+        case zero
+        /// 1, such as 12/12, which would mean it's certain.
+        case certain
+        /// The chance of it not happening, such as 9/12 for 3/12.
+        case complement
+        /// The ones wanted over the ones not wanted, such as 3/9 for 3/12.
+        case odds
+        /// Coins: the chance for one flip, 1/2, when there are more flips.
+        case oneFlip
+        /// Coins: 2 added for each flip rather than multiplied, such as 1/6 for 3 flips.
+        case flipsTimesTwo
+        /// Dice: the number on the face as the count, such as 4/6 for rolling a 4.
+        case faceNumber
+    }
+
+    /// The question's words: what's wanted for several and for one, the things counted, the event, and the rest.
+    private var words: (want: String, wantOne: String, things: String, event: String, others: String) {
+        switch self {
+        case let .die(_, target):
+            return ("show a \(target)", "shows a \(target)", "faces", "rolling a \(target)", "don't show a \(target)")
+        case .spinner:
+            return ("are blue", "is blue", "sections", "landing on blue", "aren't blue")
+        case .coin:
+            return ("", "", "ways the flips can land", "getting heads every time", "aren't heads every time")
+        case .marbles:
+            return ("are red", "is red", "marbles", "drawing a red marble", "aren't red")
+        case .cards:
+            return ("are aces", "is an ace", "cards", "drawing an ace", "aren't aces")
+        }
+    }
+
+    private func want(_ count: Int) -> String {
+        count == 1 ? words.wantOne : words.want
+    }
+
+    /// The mistake the fraction top/bottom shows, if any, checked after the answer is known to be wrong.
+    func mistake(top: Int, bottom: Int) -> Mistake? {
+        let (wanted, all) = probability
+        let isEqual = { (numerator: Int, denominator: Int) in
+            denominator > 0 && TypedAnswer.fractionsAreEqual(top, bottom, numerator, denominator)
+        }
+        guard bottom > 0, !isEqual(wanted, all) else { return nil }
+        if wanted != all, isEqual(all, wanted) { return .upsideDown }
+        if top > bottom { return .moreThanOne }
+        if top == 0 { return .zero }
+        if top == bottom { return .certain }
+        if isEqual(all - wanted, all) { return .complement }
+        if isEqual(wanted, all - wanted) { return .odds }
+        if case let .coin(flips) = self {
+            if flips >= 2, isEqual(1, 2) { return .oneFlip }
+            if flips >= 3, isEqual(1, 2 * flips) { return .flipsTimesTwo }
+        }
+        if case let .die(faces, target) = self, target != 1, isEqual(target, faces) { return .faceNumber }
+        return nil
+    }
+
+    /// A way to work it out, for a wrong answer that doesn't show a mistake.
+    private var strategy: SpokenText {
+        guard case let .coin(flips) = self else {
+            return SpokenText("How many \(words.things) \(words.want)? How many \(words.things) are there altogether?")
+        }
+        if flips == 1 {
+            return SpokenText("How many sides does a coin have? How many of them are heads?")
+        }
+        let allHeads = String(repeating: "H", count: flips)
+        let oneTails = String(repeating: "H", count: flips - 1) + "T"
+        return SpokenText("List the ways the flips can land, such as \(allHeads) and \(oneTails). "
+                              + "How many are heads every time?",
+                          spoken: "List the ways the flips can land, such as \(Self.said(allHeads)) and "
+                              + "\(Self.said(oneTails)). How many are heads every time?")
+    }
+
+    /// "HHT" read "heads heads tails".
+    private static func said(_ flips: String) -> String {
+        flips.map { $0 == "H" ? "heads" : "tails" }.joined(separator: " ")
+    }
+
+    func hint(after response: Response) -> SpokenText {
+        let strategy = strategy
+        func leading(_ lead: String) -> SpokenText {
+            SpokenText("\(lead) \(strategy.text)", spoken: "\(lead) \(strategy.spoken)")
+        }
+        guard let top = TypedAnswer.wholeNumber(response.numerator),
+              let bottom = TypedAnswer.wholeNumber(response.denominator) else { return strategy }
+        switch mistake(top: top, bottom: bottom) {
+        case .upsideDown:
+            return SpokenText("The numbers are upside down. The total goes on the bottom.")
+        case .moreThanOne:
+            return leading("A probability can't be more than 1, so the top number can't be bigger than the bottom.")
+        case .zero:
+            return leading("0 means it can't happen, but it can.")
+        case .certain:
+            return leading("That means it's certain, but it isn't.")
+        case .complement:
+            return leading("That is the chance of not \(words.event).")
+        case .odds:
+            // Never a single coin flip: its 1/1 is caught as certain first.
+            return SpokenText("The bottom number is all the \(words.things), not only the ones that \(words.others).")
+        case .oneFlip:
+            return SpokenText("1/2 is the chance for one flip. Each extra flip halves it again.",
+                              spoken: "1 half is the chance for one flip. Each extra flip halves it again.")
+        case .flipsTimesTwo:
+            return SpokenText("Each flip can land 2 ways, so multiply 2s together, one 2 for each flip.",
+                              spoken: "Each flip can land 2 ways, so multiply twos together, one two for each flip.")
+        case .faceNumber:
+            guard case let .die(_, target) = self else { return strategy }
+            return SpokenText("\(target) is the number on the face, not how many faces show it. "
+                                  + "How many faces show a \(target)?")
+        case nil:
+            return strategy
+        }
+    }
+
+    /// "3/12", read "3 twelfths".
+    private static func fraction(_ numerator: Int, _ denominator: Int) -> SpokenText {
+        SpokenText("\(numerator)/\(denominator)",
+                   spoken: SpokenMaths.fraction(numerator: numerator, denominator: denominator))
+    }
+
+    /// The probability in its simplest form, worked out here rather than taken from how the answer is checked.
+    private var simplest: (numerator: Int, denominator: Int) {
+        let (wanted, all) = probability
+        let divisor = TypedAnswer.greatestCommonDivisor(wanted, all)
+        return (wanted / divisor, all / divisor)
+    }
+
+    /// "3/12 = 1/4", or "1/10" when it can't be simplified.
+    private var answerFraction: SpokenText {
+        let (wanted, all) = probability
+        let counted = Self.fraction(wanted, all)
+        guard simplest != (wanted, all) else { return counted }
+        let simplified = Self.fraction(simplest.numerator, simplest.denominator)
+        return SpokenText("\(counted.text) = \(simplified.text)",
+                          spoken: "\(counted.spoken), which is the same as \(simplified.spoken)")
+    }
+
+    var correctLine: SpokenText {
+        let (wanted, all) = probability
+        let lead: String
+        if case let .coin(flips) = self {
+            lead = flips == 1 ? "1 of the 2 sides is heads" : "\(flips) flips can land \(all) ways, and 1 of them is heads every time"
+        } else {
+            lead = "\(wanted) of the \(all) \(words.things) \(want(wanted))"
+        }
+        return SpokenText("\(lead), so the probability is \(answerFraction.text).",
+                          spoken: "\(lead), so the probability is \(answerFraction.spoken).")
+    }
+
+    var workedSolution: WorkedSolution {
+        let (wanted, all) = probability
+        let counted = Self.fraction(wanted, all)
+        var steps: [SpokenText]
+        if case let .coin(flips) = self {
+            if flips == 1 {
+                steps = [SpokenText("A coin can land 2 ways, heads or tails, and both are equally likely."),
+                         SpokenText("1 of them is heads.")]
+            } else {
+                let ways = Self.ways(flips)
+                let twos = Array(repeating: "2", count: flips).joined(separator: " × ")
+                let allHeads = String(repeating: "H", count: flips)
+                steps = [
+                    SpokenText("Each flip can land 2 ways, so \(flips) flips can land \(twos) = \(all) ways: "
+                                   + "\(ways.joined(separator: ", ").replacingLastComma()).",
+                               spoken: "Each flip can land 2 ways, so \(flips) flips can land "
+                                   + "\(ExplanationWording.say(twos)) equals \(all) ways: "
+                                   + "\(ways.map(Self.said).joined(separator: ", ").replacingLastComma())."),
+                    SpokenText("Only \(allHeads) is heads every time.", spoken: "Only \(Self.said(allHeads)) is heads every time.")
+                ]
+            }
+        } else {
+            steps = [SpokenText("There are \(all) \(words.things), and each is equally likely."),
+                     SpokenText("\(wanted) of them \(want(wanted))."),
+                     SpokenText("So the probability is \(wanted) out of \(all), which is \(counted.text).",
+                                spoken: "So the probability is \(wanted) out of \(all), which is \(counted.spoken).")]
+        }
+        guard simplest != (wanted, all) else {
+            return WorkedSolution(steps: steps, answer: ExplanationWording.answer(counted.text, spoken: counted.spoken))
+        }
+        let simplified = Self.fraction(simplest.numerator, simplest.denominator)
+        let divisor = wanted / simplest.numerator
+        steps.append(SpokenText("\(counted.text) simplifies to \(simplified.text), dividing both numbers by \(divisor).",
+                                spoken: "\(counted.spoken) simplifies to \(simplified.spoken), "
+                                    + "dividing both numbers by \(divisor)."))
+        return WorkedSolution(steps: steps,
+                              answer: ExplanationWording.answer("\(counted.text), or \(simplified.text) in its simplest form",
+                                                                spoken: "\(counted.spoken), or \(simplified.spoken) in its simplest form"))
+    }
+
+    /// Every way the flips can land, in order: "HH", "HT", "TH", "TT".
+    private static func ways(_ flips: Int) -> [String] {
+        (0..<(1 << flips)).map { number in
+            String((0..<flips).reversed().map { number >> $0 & 1 == 0 ? "H" : "T" })
+        }
+    }
+}
+
+private extension String {
+    /// "HH, HT, TH, TT" as "HH, HT, TH and TT".
+    func replacingLastComma() -> String {
+        guard let range = range(of: ", ", options: .backwards) else { return self }
+        return replacingCharacters(in: range, with: " and ")
     }
 }

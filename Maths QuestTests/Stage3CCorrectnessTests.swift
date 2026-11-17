@@ -929,10 +929,12 @@ struct Year6AlgebraQuestionTests {
     @Test func solvingTheEquation() {
         let question = Year6AlgebraQuestion(kind: .solve, first: 7, second: 12, multiplier: 2)
         #expect(question.expression == "x + 7 = 19")
-        for answer in ["12", " 12 ", "012", "x = 12", "x=12", "X = 12"] {
+        // Updated deliberately in Stage 9C Batch 2 (B2-2): "12 = x" and "+12" say the same thing as "x = 12", so
+        // they're now accepted. Everything else is unchanged.
+        for answer in ["12", " 12 ", "012", "x = 12", "x=12", "X = 12", "12 = x", "+12"] {
             #expect(question.evaluate(answer) == .correct, "\(answer)")
         }
-        for answer in ["19", "7", "26", "-12", "12.5", "x", "x =", "12x", "x = 19", "12 = x", "99999999999999999999"] {
+        for answer in ["19", "7", "26", "-12", "12.5", "x", "x =", "12x", "x = 19", "99999999999999999999"] {
             #expect(question.evaluate(answer) == .incorrect, "\(answer)")
         }
         #expect(question.evaluate("") == .unanswered)

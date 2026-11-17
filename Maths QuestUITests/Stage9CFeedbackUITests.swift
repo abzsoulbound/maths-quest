@@ -23,7 +23,7 @@ import XCTest
 /// The rewarded test ad is closed with its × only. Skip without an ad, after Remove Ads is bought, can't be reached
 /// here without a purchase; it runs the same code as soon as Skip is tapped.
 @MainActor
-final class Stage9CFeedbackUITests: MathsQuestUITestCase {
+final class Stage9CFeedbackUITests: Stage9CFeedbackChecks {
 
     // MARK: Year 2 Multiplication
 
@@ -350,6 +350,12 @@ final class Stage9CFeedbackUITests: MathsQuestUITestCase {
             assertPoints(start + 1)
         }
     }
+}
+
+/// The checks Stage 9C's tests share, kept apart from the tests so that a class for another batch can use them without
+/// running these tests again (XCTest runs a class's tests in every subclass).
+@MainActor
+class Stage9CFeedbackChecks: MathsQuestUITestCase {
 
     // MARK: Checks
 
@@ -839,6 +845,29 @@ class Stage9CHintKeyboardUITests: Stage9BKeyboardChecks {
     @MainActor func testRatiosHintKeepsTheQuestionInView() throws {
         try checkWithHint(on: "Ratios", inYear: 6, wanted: NSPredicate(format: "label BEGINSWITH 'Divide '"),
                           fillWrongAnswer: { [unowned self] in self.fillShareTheWrongWayRound() })
+    }
+
+    /// Year 6 Probability's Enter has no trailing space. Every other activity's Enter matches this too.
+    @MainActor override var enterButton: XCUIElement { anyEnterButton }
+
+    /// Stage 9C Batch 2: a Simplify question, whose strategy hint for a wrong answer is the longest Algebra hint.
+    /// 99 is never an Algebra answer.
+    @MainActor func testAlgebraHintKeepsTheQuestionInView() throws {
+        try checkWithHint(on: "Algebra", inYear: 6, wrongAnswer: "99",
+                          wanted: NSPredicate(format: "label MATCHES %@", "[0-9]*x \\+ [0-9]*x"))
+    }
+
+    /// Stage 9C Batch 2: the die question, the longest, answered 100 over 99, whose "can't be more than 1" hint with
+    /// its strategy is the longest Probability hint.
+    @MainActor func testProbabilityHintKeepsTheQuestionInView() throws {
+        try checkWithHint(on: "Probability", inYear: 6, wanted: NSPredicate(format: "label BEGINSWITH 'A fair die has'"),
+                          fillWrongAnswer: { [unowned self] in
+                              for (name, number) in [("Numerator", "100"), ("Denominator", "99")] {
+                                  let box = self.app.textFields.matching(
+                                      NSPredicate(format: "placeholderValue == %@ OR label == %@", name, name)).firstMatch
+                                  self.replaceText(in: box, with: number)
+                              }
+                          })
     }
 
     /// Types the shares of "Divide 35 in the ratio 3 to 4" the wrong way round, 20 and 15, which the hint names. Where

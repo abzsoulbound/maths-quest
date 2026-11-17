@@ -701,14 +701,17 @@ struct Stage9BSourceTests {
     ///
     /// Updated deliberately in Stage 9C: after Skip, Year 6 Ratio's Next Question takes the place of the row with Enter
     /// and is marked as the row instead, so Ratio has two rows, one for each case. The pad must be below both.
+    /// Updated deliberately in Stage 9C Batch 2 (B2-1): Algebra and Probability now show a worked solution and Next
+    /// Question after Skip too, so they also have two rows.
     @Test func everyWorkingOutPadIsBelowEnter() throws {
         let activities = ["Year3FractionsView", "Year3MeasurementView", "Year3TimeView", "Year4DecimalsView",
                           "Year4MoneyView", "Year5PercentagesView", "Year5StatisticsView", "Year5VolumeView",
                           "Year6AlgebraView", "Year6ProbabilityView", "Year6RatiosView"]
+        let withNextQuestion: Set = ["Year6RatiosView", "Year6AlgebraView", "Year6ProbabilityView"]
         for activity in activities {
             let body = try Stage9BSource.view(activity)
             #expect(Stage9BSource.count("WorkingOutView(", in: body) == 1, "\(activity)")
-            let rows = activity == "Year6RatiosView" ? 2 : 1
+            let rows = withNextQuestion.contains(activity) ? 2 : 1
             #expect(Stage9BSource.count(".questionSubmitRow()", in: body) == rows, "\(activity)")
             let row = try #require(body.range(of: ".questionSubmitRow()", options: .backwards), "\(activity)")
             let pad = try #require(body.range(of: "WorkingOutView("), "\(activity)")

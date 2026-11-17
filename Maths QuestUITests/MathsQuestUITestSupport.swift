@@ -56,6 +56,19 @@ class MathsQuestUITestCase: XCTestCase {
         "Type just the number, then pick the unit.",
         "Type just the number.",
         "Turning it doesn't change what shape it is.",
+        // Stage 9C Batch 2: Algebra answers that are right but written another way, or equal but not simplified,
+        // asked for again. As VoiceOver reads them, which is how XCUITest finds them.
+        "Write x as a whole number, without a decimal point.",
+        "Write each number as a whole number, without a decimal point.",
+        "In algebra, leave out the times sign. Write 2x, not 2 times x.",
+        "In algebra, leave out the times sign. Write 3x, not 3 times x.",
+        "In algebra, write the number before the x, like 2x.",
+        "In algebra, write the number before the x, like 3x.",
+        "That's equal, but it needs simplifying further.",
+        "That's true, but it needs simplifying further.",
+        "That's the question. It needs simplifying.",
+        "That's the question. It needs expanding.",
+        "That's the question. Work out what x is.",
     ]
 
     enum UITestSafetyError: Error {

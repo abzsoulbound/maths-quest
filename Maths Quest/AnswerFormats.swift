@@ -63,3 +63,11 @@ enum AnswerFormat {
         return String(text.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
+
+/// A message for an answer that is asked for again, shown in place of "Incorrect. Try Again!": the words shown and
+/// read, and a line under them that says how to write the answer. Asked for again as above: no score, no sound, no
+/// count towards Skip and no new hint. Stage 9C Batch 2, for Year 6 Algebra.
+struct AskedAgainMessage: Equatable {
+    let message: SpokenText
+    var detail: SpokenText? = nil
+}
